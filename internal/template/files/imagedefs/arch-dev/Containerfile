@@ -1,0 +1,39 @@
+# NeonRoot image definition for {{image}} (arch-dev) — a batteries-included
+# terminal dev environment. Edit freely, then: neonroot image build {{image}}
+#
+# NOTE: icon glyphs (nvim, starship, eza) render using the *host terminal's*
+# font — install a Nerd Font on the host and select it in your terminal.
+FROM docker.io/library/archlinux:latest
+
+# Core toolchain + modern CLI powertools.
+RUN pacman -Syu --noconfirm --needed \
+      base-devel git openssh man-db \
+      neovim tmux \
+      starship just \
+      ripgrep fd fzf bat eza zoxide lazygit github-cli \
+      wget curl unzip \
+      python python-pip nodejs npm \
+      ttf-nerd-fonts-symbols-mono \
+    && pacman -Scc --noconfirm
+
+# LazyVim starter config.
+RUN git clone --depth 1 https://github.com/LazyVim/starter /root/.config/nvim \
+    && rm -rf /root/.config/nvim/.git
+
+# Pre-sync Neovim plugins so the editor works without network on first launch.
+RUN nvim --headless "+Lazy! sync" +qa 2>/dev/null || true
+
+# tmux session saving: resurrect + continuum, sourced directly (no tpm needed).
+RUN git clone --depth 1 https://github.com/tmux-plugins/tmux-resurrect /root/.tmux/plugins/tmux-resurrect \
+    && git clone --depth 1 https://github.com/tmux-plugins/tmux-continuum /root/.tmux/plugins/tmux-continuum
+
+# Starship prompt preset (offline — built into the binary).
+RUN mkdir -p /root/.config && starship preset nerd-font-symbols -o /root/.config/starship.toml
+
+# Shell + tmux config (edit the copies in this image's dotfiles/ to customize).
+COPY dotfiles/bashrc /root/.bashrc
+COPY dotfiles/tmux.conf /root/.tmux.conf
+
+ENV EDITOR=nvim VISUAL=nvim
+WORKDIR /workspace
+CMD ["/bin/bash"]

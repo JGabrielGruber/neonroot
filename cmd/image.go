@@ -23,10 +23,16 @@ var imageCmd = &cobra.Command{
 image straight from the vault's data with no network.`,
 }
 
+var imageTemplateFlag string
+
 var imageCreateCmd = &cobra.Command{
 	Use:   "create <name>",
-	Short: "Scaffold a new image definition (Containerfile) in a vault",
-	Args:  cobra.ExactArgs(1),
+	Short: "Scaffold a new image definition in a vault",
+	Long: `Scaffolds an image (a Containerfile, plus any dotfiles) from a template.
+'minimal' is a bare Arch base; 'arch-dev' is a batteries-included terminal dev
+environment (nvim+LazyVim, tmux session saving, starship, just, and modern CLI
+powertools). Edit it, then 'neonroot image build <name>'.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		v, err := app.resolveVault(imageVaultFlag)
@@ -36,15 +42,18 @@ var imageCreateCmd = &cobra.Command{
 		if err := app.requireAvailable(v); err != nil {
 			return err
 		}
-		path := vault.ContainerfilePath(v.Path, name)
-		if _, err := os.Stat(path); err == nil {
+		dir := vault.ImageDir(v.Path, name)
+		if _, err := os.Stat(dir); err == nil {
 			return fmt.Errorf("image %q already exists in vault %q", name, v.Name)
 		}
-		if err := template.WriteImageContainerfile(path, name); err != nil {
+		if err := template.WriteImage(imageTemplateFlag, dir, name); err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("no image template %q (available: %v)", imageTemplateFlag, template.ImageTemplates())
+			}
 			return err
 		}
-		app.UI.Success(fmt.Sprintf("created image %q in vault %q", name, v.Name))
-		app.UI.Info(fmt.Sprintf("edit %s, then 'neonroot image build %s'", path, name))
+		app.UI.Success(fmt.Sprintf("created image %q in vault %q (template %q)", name, v.Name, imageTemplateFlag))
+		app.UI.Info(fmt.Sprintf("edit %s, then 'neonroot image build %s'", vault.ContainerfilePath(v.Path, name), name))
 		return nil
 	},
 }
@@ -312,6 +321,7 @@ func init() {
 	for _, c := range []*cobra.Command{imageCreateCmd, imageBuildCmd, imageLsCmd, imageRmCmd, imageSetCmd} {
 		c.Flags().StringVar(&imageVaultFlag, "vault", "", "vault holding the image (default: configured default vault)")
 	}
+	imageCreateCmd.Flags().StringVar(&imageTemplateFlag, "template", "minimal", "image template: minimal | arch-dev (see the scaffolded Containerfile)")
 	imageSetCmd.Flags().StringVar(&imageRenameFlag, "rename", "", "rename the image")
 	imageCmd.AddCommand(imageCreateCmd, imageBuildCmd, imageLsCmd, imageRmCmd, imageSnapshotCmd, imageSetCmd)
 	rootCmd.AddCommand(imageCmd)

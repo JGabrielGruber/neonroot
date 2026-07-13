@@ -23,8 +23,8 @@ import (
 var files embed.FS
 
 const (
-	shippedRoot = "files/templates"
-	imageFile   = "files/image/Containerfile"
+	shippedRoot   = "files/templates"
+	imagedefsRoot = "files/imagedefs"
 )
 
 // Source identifies where a template came from.
@@ -85,13 +85,39 @@ func shippedNames() []string {
 // substituting {{workspace}} with wsName. Returns an error if no such template.
 func Write(name, userDir, dstDir, wsName string) error {
 	if dir := filepath.Join(userDir, name); isDir(dir) {
-		return copyTree(os.DirFS(dir), ".", dstDir, wsName)
+		return copyTree(os.DirFS(dir), ".", dstDir, "{{workspace}}", wsName)
 	}
 	sub := filepath.Join(shippedRoot, name)
 	if isEmbeddedDir(sub) {
-		return copyTree(files, sub, dstDir, wsName)
+		return copyTree(files, sub, dstDir, "{{workspace}}", wsName)
 	}
 	return os.ErrNotExist
+}
+
+// ImageTemplates lists the shipped image-definition templates.
+func ImageTemplates() []string {
+	entries, err := files.ReadDir(imagedefsRoot)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// WriteImage seeds an image directory (Containerfile + any dotfiles) from the
+// named image template, substituting {{image}} with imageName.
+func WriteImage(tpl, dstDir, imageName string) error {
+	sub := filepath.Join(imagedefsRoot, tpl)
+	if !isEmbeddedDir(sub) {
+		return os.ErrNotExist
+	}
+	return copyTree(files, sub, dstDir, "{{image}}", imageName)
 }
 
 // Scaffold creates a new user template directory (seeded from the shipped
@@ -101,25 +127,15 @@ func Scaffold(userDir, name string) (string, error) {
 	if isDir(dst) {
 		return "", os.ErrExist
 	}
-	if err := copyTree(files, filepath.Join(shippedRoot, "default"), dst, ""); err != nil {
+	if err := copyTree(files, filepath.Join(shippedRoot, "default"), dst, "{{workspace}}", ""); err != nil {
 		return "", err
 	}
 	return dst, nil
 }
 
-// WriteImageContainerfile writes the shipped default Containerfile to dst,
-// substituting {{image}} with the image name.
-func WriteImageContainerfile(dst, name string) error {
-	data, err := files.ReadFile(imageFile)
-	if err != nil {
-		return err
-	}
-	return writeFile(dst, substitute(data, "{{image}}", name))
-}
-
 // copyTree walks src (an fs.FS rooted at root) into dstDir, substituting
-// {{workspace}} with wsName in every file.
-func copyTree(fsys fs.FS, root, dstDir, wsName string) error {
+// placeholder with value in every file.
+func copyTree(fsys fs.FS, root, dstDir, placeholder, value string) error {
 	return fs.WalkDir(fsys, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -136,7 +152,7 @@ func copyTree(fsys fs.FS, root, dstDir, wsName string) error {
 		if err != nil {
 			return err
 		}
-		return writeFile(target, substitute(data, "{{workspace}}", wsName))
+		return writeFile(target, substitute(data, placeholder, value))
 	})
 }
 

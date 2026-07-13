@@ -85,3 +85,32 @@ func TestScaffold(t *testing.T) {
 		t.Errorf("expected ErrExist on duplicate scaffold, got %v", err)
 	}
 }
+
+func TestImageTemplates_And_WriteImage(t *testing.T) {
+	names := ImageTemplates()
+	has := map[string]bool{}
+	for _, n := range names {
+		has[n] = true
+	}
+	if !has["minimal"] || !has["arch-dev"] {
+		t.Fatalf("expected minimal + arch-dev image templates, got %v", names)
+	}
+	dst := t.TempDir()
+	if err := WriteImage("arch-dev", dst, "myimg"); err != nil {
+		t.Fatal(err)
+	}
+	// Containerfile + dotfiles copied, {{image}} substituted.
+	cf, err := os.ReadFile(filepath.Join(dst, "Containerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(cf), "myimg") || strings.Contains(string(cf), "{{image}}") {
+		t.Errorf("{{image}} not substituted")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "dotfiles", "bashrc")); err != nil {
+		t.Errorf("dotfiles not copied: %v", err)
+	}
+	if !os.IsNotExist(WriteImage("nope", t.TempDir(), "x")) {
+		t.Error("unknown image template should be not-exist")
+	}
+}

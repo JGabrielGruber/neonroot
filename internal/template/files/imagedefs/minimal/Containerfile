@@ -1,0 +1,10 @@
+# NeonRoot image definition for {{image}} (minimal).
+# Edit this, then `neonroot image build {{image}}` to build it and save its data
+# into the vault (so it runs offline).
+FROM docker.io/library/archlinux:latest
+
+RUN pacman -Syu --noconfirm --needed base-devel git && \
+    pacman -Scc --noconfirm
+
+WORKDIR /workspace
+CMD ["/bin/bash"]

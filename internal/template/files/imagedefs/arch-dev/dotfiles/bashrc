@@ -1,0 +1,21 @@
+# NeonRoot arch-dev shell.
+export EDITOR=nvim
+export VISUAL=nvim
+
+# Modern replacements + handy aliases.
+alias ls='eza --group-directories-first'
+alias ll='eza -lah --group-directories-first --git'
+alias la='eza -a'
+alias tree='eza --tree'
+alias cat='bat --paging=never'
+alias vim='nvim'
+alias lg='lazygit'
+
+# Prompt, smart cd, fuzzy finder.
+command -v starship >/dev/null && eval "$(starship init bash)"
+command -v zoxide  >/dev/null && eval "$(zoxide init bash)"
+[ -f /usr/share/fzf/key-bindings.bash ] && source /usr/share/fzf/key-bindings.bash
+[ -f /usr/share/fzf/completion.bash ]  && source /usr/share/fzf/completion.bash
+
+# Start where the workspace is mounted.
+cd /workspace 2>/dev/null || true

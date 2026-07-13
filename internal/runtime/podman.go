@@ -11,6 +11,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -41,6 +42,8 @@ type RunSpec struct {
 	MountTarget string
 	// Command overrides the image's default command, if set.
 	Command []string
+	// Pod, if set, joins the container to that pod (shared network).
+	Pod string
 }
 
 // Podman is the exec-backed Runtime. GraphRoot/RunRoot relocate storage onto
@@ -75,6 +78,9 @@ func (p *Podman) Version(ctx context.Context) (string, error) {
 // hitting a registry.
 func (p *Podman) Run(ctx context.Context, spec RunSpec) (string, error) {
 	args := append(p.baseArgs(), "run", "-d", "--pull=never")
+	if spec.Pod != "" {
+		args = append(args, "--pod", spec.Pod)
+	}
 	if spec.Name != "" {
 		args = append(args, "--name", spec.Name)
 	}
@@ -111,6 +117,41 @@ func (p *Podman) Start(ctx context.Context, image, name, workspaceDir, mountTarg
 		MountTarget:  mountTarget,
 		Command:      []string{"sleep", "infinity"},
 	})
+}
+
+// StartPod starts a workspace whose image list is a pod: the primary image
+// (imageRefs[0]) runs with the workspace bind-mounted and is where the shell
+// attaches; the remaining images run as sidecars sharing the pod's network
+// (reachable over localhost). Returns the primary container's ID.
+func (p *Podman) StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string) (string, error) {
+	args := append(p.baseArgs(), "pod", "create", "--name", podName)
+	if _, err := p.Runner.Run(ctx, "podman", args...); err != nil {
+		return "", err
+	}
+	primaryID, err := p.Run(ctx, RunSpec{
+		Pod: podName, Image: imageRefs[0], Name: primaryName,
+		WorkspaceDir: workspaceDir, MountTarget: mountTarget,
+		Command: []string{"sleep", "infinity"},
+	})
+	if err != nil {
+		return "", err
+	}
+	for i, ref := range imageRefs[1:] {
+		if _, err := p.Run(ctx, RunSpec{
+			Pod: podName, Image: ref,
+			Name: fmt.Sprintf("%s-side%d", primaryName, i+1),
+		}); err != nil {
+			return "", err
+		}
+	}
+	return primaryID, nil
+}
+
+// StopPod stops and removes a pod and all its containers.
+func (p *Podman) StopPod(ctx context.Context, name string) error {
+	args := append(p.baseArgs(), "pod", "rm", "-f", name)
+	_, err := p.Runner.Run(ctx, "podman", args...)
+	return err
 }
 
 // ImageExists reports whether an image reference is present in the tmpfs store.

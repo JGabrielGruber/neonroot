@@ -36,6 +36,9 @@ type Runtime interface {
 	// Start launches the primary container with the workspace bind-mounted at
 	// mountTarget (empty = default) and returns its ID.
 	Start(ctx context.Context, image, name, workspaceDir, mountTarget string) (string, error)
+	// StartPod launches a pod: the primary image (refs[0]) with the workspace
+	// mounted, plus sidecars sharing the network. Returns the primary's ID.
+	StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string) (string, error)
 	ExecArgs(containerID string) []string
 }
 
@@ -143,6 +146,9 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 			l.UI.Warn(fmt.Sprintf("container not started (host-only): %v", err))
 		} else {
 			ws.ContainerID = cid
+			if len(entry.Images) > 1 {
+				ws.Pod = containerName(name)
+			}
 			command = l.Runtime.ExecArgs(cid)
 			if err := WriteState(l.Paths, ws); err != nil {
 				return nil, err
@@ -164,17 +170,22 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 // workspace bind-mounted at the configured target. Sidecar images (the rest of
 // the list) are loaded too but only run as a pod in a later phase.
 func (l *Loader) startContainer(ctx context.Context, v domain.Vault, entry domain.IndexWorkspace, name, dst string) (string, error) {
-	for _, img := range entry.Images {
+	refs := make([]string, len(entry.Images))
+	for i, img := range entry.Images {
 		l.UI.Step(fmt.Sprintf("loading image %q", img))
-		ref := vault.ImageRef(img)
+		refs[i] = vault.ImageRef(img)
 		tar := vault.ImageTarPath(v.Path, img)
-		if err := l.Runtime.EnsureImage(ctx, ref, tar, l.ReloadImage); err != nil {
+		if err := l.Runtime.EnsureImage(ctx, refs[i], tar, l.ReloadImage); err != nil {
 			return "", err
 		}
 	}
-	primary := entry.PrimaryImage()
-	l.UI.Step(fmt.Sprintf("starting container (%s)", primary))
-	return l.Runtime.Start(ctx, vault.ImageRef(primary), containerName(name), dst, entry.Mount)
+	// One image → a single container; multiple → a pod (primary + sidecars).
+	if len(refs) == 1 {
+		l.UI.Step(fmt.Sprintf("starting container (%s)", entry.Images[0]))
+		return l.Runtime.Start(ctx, refs[0], containerName(name), dst, entry.Mount)
+	}
+	l.UI.Step(fmt.Sprintf("starting pod (%s + %d sidecar(s))", entry.Images[0], len(refs)-1))
+	return l.Runtime.StartPod(ctx, containerName(name), refs, containerName(name), dst, entry.Mount)
 }
 
 // containerName derives a stable container name from a workspace name, matching

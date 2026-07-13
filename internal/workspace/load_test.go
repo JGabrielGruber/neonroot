@@ -158,6 +158,11 @@ func (f *fakeRuntime) Start(_ context.Context, image, _, _, mountTarget string) 
 	f.mount = mountTarget
 	return f.id, nil
 }
+func (f *fakeRuntime) StartPod(_ context.Context, _ string, refs []string, _, _, mountTarget string) (string, error) {
+	f.started = append(f.started, refs...)
+	f.mount = mountTarget
+	return f.id, nil
+}
 func (f *fakeRuntime) ExecArgs(id string) []string {
 	return []string{"podman", "exec", "-it", id, "/bin/bash"}
 }
@@ -215,6 +220,29 @@ func TestLoad_StartsContainerWhenImageDeclared(t *testing.T) {
 	}
 	if len(sess.command) == 0 || sess.command[0] != "podman" {
 		t.Errorf("session should exec into container, got %v", sess.command)
+	}
+}
+
+func TestLoad_MultiImageStartsPod(t *testing.T) {
+	loader, v, _ := testEnv(t)
+	// Give the workspace two images (primary + sidecar).
+	idx, _ := vault.ReadIndex(v.Path)
+	idx.Workspaces[0].Images = []string{"app", "db"}
+	_ = vault.WriteIndex(v.Path, idx)
+
+	rt := &fakeRuntime{available: true, id: "primary-cid"}
+	loader.Runtime = rt
+	loader.Sessions = &fakeSessions{}
+
+	ws, err := loader.Load(v, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Pod == "" {
+		t.Error("multi-image workspace should record a pod name")
+	}
+	if len(rt.started) != 2 {
+		t.Errorf("pod should start primary + sidecar, got %v", rt.started)
 	}
 }
 

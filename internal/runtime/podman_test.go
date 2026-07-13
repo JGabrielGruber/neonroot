@@ -127,6 +127,25 @@ func TestPodman_EnsureImage_SkipsWhenPresent(t *testing.T) {
 	}
 }
 
+func TestPodman_StartPod(t *testing.T) {
+	rec := runnertest.New()
+	if _, err := newPodman(rec).StartPod(context.Background(), "nr-app",
+		[]string{"img-primary", "img-side"}, "nr-app", "/tmp/ws", "/workspace"); err != nil {
+		t.Fatal(err)
+	}
+	base := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers "
+	lines := rec.Lines()
+	if lines[0] != base+"pod create --name nr-app" {
+		t.Errorf("pod create: %q", lines[0])
+	}
+	if lines[1] != base+"run -d --pull=never --pod nr-app --name nr-app -v /tmp/ws:/workspace -w /workspace img-primary sleep infinity" {
+		t.Errorf("primary: %q", lines[1])
+	}
+	if lines[2] != base+"run -d --pull=never --pod nr-app --name nr-app-side1 img-side" {
+		t.Errorf("sidecar: %q", lines[2])
+	}
+}
+
 func TestPodman_Available(t *testing.T) {
 	rec := runnertest.New()
 	if !newPodman(rec).Available() {

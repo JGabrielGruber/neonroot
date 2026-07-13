@@ -18,6 +18,9 @@ type Workspace struct {
 	Images []string `toml:"images,omitempty"`
 	// ContainerID is the running (primary) container backing this workspace.
 	ContainerID string `toml:"container_id,omitempty"`
+	// Pod is the podman pod name when the workspace runs multiple images
+	// (primary + sidecars); empty for a single container or host-only.
+	Pod string `toml:"pod,omitempty"`
 }
 
 // Fingerprint is a cheap identity of a vault index's state at a point in time,

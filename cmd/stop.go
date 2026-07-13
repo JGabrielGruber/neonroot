@@ -43,13 +43,17 @@ them.`,
 			}
 		}
 
-		// Stop the container, if this workspace had one.
-		if ws.ContainerID != "" {
+		// Stop the pod (multi-image) or the single container.
+		if ws.Pod != "" || ws.ContainerID != "" {
 			pod, err := app.podman()
 			if err != nil {
 				return err
 			}
-			if err := pod.Stop(cmd.Context(), ws.ContainerID); err != nil {
+			if ws.Pod != "" {
+				if err := pod.StopPod(cmd.Context(), ws.Pod); err != nil {
+					app.UI.Warn(fmt.Sprintf("could not stop pod: %v", err))
+				}
+			} else if err := pod.Stop(cmd.Context(), ws.ContainerID); err != nil {
 				app.UI.Warn(fmt.Sprintf("could not stop container: %v", err))
 			}
 		}

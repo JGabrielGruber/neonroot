@@ -181,9 +181,14 @@ available.
   Verified with real git + podman (tag pushed; image.tar grew after committing a
   container change). Fixed `Save` to remove a prior tar (docker-archive can't
   overwrite).
-- **Phase I — Sidecars/pods + multi-workspace mounts (scope boundary, last).** Image
-  list → per-workspace podman pod; a container mounting multiple workspaces. Podman
-  pods only, no compose engine. Spike rootless-pod-on-tmpfs first.
+- **Phase I — Sidecars/pods (scope boundary, last).** ✅ **Done (pods).** Spiked
+  rootless podman pods on a tmpfs graphroot (`/dev/shm`) — primary reaches the
+  sidecar over localhost. A workspace with >1 image runs as a per-workspace
+  **podman pod**: primary (images[0]) gets the workspace mount + the shell; the
+  rest are sidecars sharing the network. `stop` removes the whole pod. No compose
+  engine — podman pods only. Verified end-to-end. **Deferred:** multi-*workspace*
+  mounts (one container mounting several workspaces) — needs a mount-spec config
+  model; a documented future extension, not built.
 
 ## Phased delivery (foundation — shipped)
 

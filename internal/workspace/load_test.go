@@ -101,3 +101,41 @@ func TestLoad_UnavailableRepo(t *testing.T) {
 		t.Fatalf("expected ErrRepoUnavailable, got %v", err)
 	}
 }
+
+// fakeSessions records Ensure calls and can be made to fail.
+type fakeSessions struct {
+	dir string
+	err error
+}
+
+func (f *fakeSessions) Ensure(_, dir string) error {
+	f.dir = dir
+	return f.err
+}
+
+func TestLoad_StartsSessionAtWorkspaceRoot(t *testing.T) {
+	loader, r := testEnv(t)
+	sess := &fakeSessions{}
+	loader.Sessions = sess
+
+	ws, err := loader.Load(r, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess.dir != ws.Root {
+		t.Errorf("session started at %q, want workspace root %q", sess.dir, ws.Root)
+	}
+}
+
+func TestLoad_SessionFailureDoesNotFailLoad(t *testing.T) {
+	loader, r := testEnv(t)
+	loader.Sessions = &fakeSessions{err: errors.New("tmux exploded")}
+
+	ws, err := loader.Load(r, "app")
+	if err != nil {
+		t.Fatalf("session failure must not fail the load, got %v", err)
+	}
+	if !IsLoaded(loader.Paths, "app") || ws == nil {
+		t.Error("workspace should be loaded despite session failure")
+	}
+}

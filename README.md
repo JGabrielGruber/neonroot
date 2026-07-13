@@ -16,11 +16,16 @@ drive when you choose. It never writes to the SD card it boots from.
 | `status`   | ✅ working | Show repos, availability, and contents |
 | `create`   | ✅ working | Create a new empty workspace in a repo |
 | `repo add` | ✅ working | Register a repo path in config |
-| `load`     | ✅ working | Hydrate a workspace from a repo into tmpfs |
+| `load`     | ✅ working | Hydrate a workspace into tmpfs + start a tmux session |
+| `attach`   | ✅ working | Attach to a loaded workspace's tmux session |
+| `stop`     | ✅ working | Kill the session and drop the tmpfs copy |
 | `commit`   | 🚧 Phase 4 | Write workspace changes back to a repo |
 
 Global flags: `--quiet`/`-q` (warnings only), `--plain` (no color).
-`create` takes `--repo`/`-r` to target a repo (defaults to the configured default).
+`create`/`load` take `--repo`/`-r` to target a repo (defaults to the configured
+default); `load --no-session` skips starting tmux.
+
+Integration tests (real tmux/Podman) run with `go test -tags integration ./...`.
 
 ## Architecture
 

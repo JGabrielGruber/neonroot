@@ -121,6 +121,19 @@ func (p Paths) WorkspaceRoot(workspace string) string {
 	return filepath.Join(p.Workspaces, workspace)
 }
 
+// ContainersGraphRoot is Podman's image/layer store, placed on the roomier /tmp
+// tmpfs so container storage lives in RAM and unplugging the drive never
+// strands it.
+func (p Paths) ContainersGraphRoot() string {
+	return filepath.Join(filepath.Dir(p.Workspaces), "containers")
+}
+
+// ContainersRunRoot is Podman's transient runtime state, on the per-user
+// runtime tmpfs.
+func (p Paths) ContainersRunRoot() string {
+	return filepath.Join(p.Runtime, "containers")
+}
+
 func isDir(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()

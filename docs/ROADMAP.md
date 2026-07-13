@@ -129,9 +129,14 @@ testable deliverable (unit-testable with fakes; no drive/Podman needed until Pha
   double-load guard → hydrate → persist manifest + state with source fingerprint,
   rollback on failure) plus loaded-workspace tracking. `load` works; `status`
   lists loaded workspaces. Verified: load → unplug → workspace still usable.
-- **Phase 3 — Session & runtime.** `internal/session` (tmux) + `internal/runtime`
-  (podman) interfaces + fakes + exec impls; Podman graphroot→tmpfs; wire session
-  into `load`. **Flag:** validate graphroot-on-tmpfs on the real Arch image.
+- **Phase 3 — Session & runtime.** ✅ **Done.** `internal/session` (tmux) and
+  `internal/runtime` (podman) adapters over the `platform.Runner` seam, with
+  recording fakes and a shared `runnertest.Recorder`; Podman pins graphroot→/tmp
+  and runroot→/run/user on every call. `load` starts a tmux session (graceful
+  degrade if tmux absent); added `attach` (stdio handover via syscall.Exec) and
+  `stop` (kill session + drop tmpfs copy). Real-Podman-on-tmpfs validation lives
+  in a `//go:build integration` suite. **Flag still open:** run that suite on the
+  Arch image to confirm rootless overlay-on-tmpfs behavior.
 - **Phase 4 — Commit & dirty-tracking.** `internal/commit`: rescan+diff, conflict
   detection, write-back, `--as`/`--force`; clean `ErrRepoUnavailable` when drive
   absent. `commit` + diff-mode `status` real.

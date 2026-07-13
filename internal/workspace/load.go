@@ -15,10 +15,21 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/ui"
 )
 
+// Sessions is the host-session capability Load uses. Defining it here (the
+// consumer) keeps workspace decoupled from the concrete tmux adapter, which
+// satisfies this interface structurally.
+type Sessions interface {
+	// Ensure starts a session for the workspace rooted at dir if absent.
+	Ensure(workspace, dir string) error
+}
+
 // Loader hydrates workspaces from repos into tmpfs.
 type Loader struct {
 	Paths platform.Paths
 	UI    ui.Reporter
+	// Sessions, if set, starts a host session for the workspace after
+	// hydration. A session failure degrades gracefully — it never fails a load.
+	Sessions Sessions
 }
 
 // Load hydrates the named workspace from repo r into tmpfs and records the
@@ -80,6 +91,15 @@ func (l *Loader) Load(r domain.Repo, name string) (*domain.Workspace, error) {
 	}
 	if err := WriteState(l.Paths, ws); err != nil {
 		return nil, err
+	}
+
+	// Start a host session so the user can attach immediately. Graceful
+	// degradation: if tmux is missing or errors, the workspace is still loaded.
+	if l.Sessions != nil {
+		l.UI.Step("starting session")
+		if err := l.Sessions.Ensure(name, dst); err != nil {
+			l.UI.Warn(fmt.Sprintf("session not started (workspace is still loaded): %v", err))
+		}
 	}
 	return ws, nil
 }

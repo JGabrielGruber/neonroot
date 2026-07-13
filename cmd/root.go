@@ -25,6 +25,7 @@ type App struct {
 	Paths  platform.Paths
 	Config *config.Config
 	UI     ui.Reporter
+	Runner platform.Runner
 }
 
 // flags holds the persistent CLI flags parsed before any command runs.
@@ -79,7 +80,7 @@ func buildApp() (*App, error) {
 
 	reporter := ui.NewStderr(ui.Options{Quiet: flags.quiet, ForcePlain: flags.plain})
 
-	return &App{Paths: paths, Config: cfg, UI: reporter}, nil
+	return &App{Paths: paths, Config: cfg, UI: reporter, Runner: platform.ExecRunner{}}, nil
 }
 
 // ensureScratchRepo materializes the tmpfs scratch repo: its directory and an

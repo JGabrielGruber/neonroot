@@ -22,9 +22,22 @@ Workspace commands (the everyday surface):
 | `create <name>` | Create a workspace (bare git repo) — default template or `--from <ws>`, optional `--image` |
 | `load <name>`   | `git clone` a workspace into tmpfs; container (if image) + tmux session |
 | `attach <name>` | Attach to a loaded workspace's session (inside its container) |
-| `commit <name>` | `git commit` + `git push` back to the vault (refuses on conflict) |
+| `commit <name>` | `git commit` + `git push` back (refuses on conflict; `--rebase`/`--as`/`--force`) |
 | `status [name]` | Vault overview, or a workspace's live git state (dirty/ahead/behind) |
-| `stop <name>`   | Stop the container/session and drop the tmpfs copy |
+| `snapshot <name> <label>` | Tag a durable point-in-time copy of the workspace |
+| `stop <name>`   | Stop the container/pod + session and drop the tmpfs copy |
+
+Image management (`neonroot image …`):
+
+| Command | Purpose |
+|---------|---------|
+| `image create <name>` | Scaffold a Containerfile in the vault |
+| `image build <name>`  | Build (online) + save the image's data into the vault |
+| `image ls` / `rm <name>` | List / remove vault images |
+| `image snapshot <ws>` | Commit a running container back into its vault image |
+
+A workspace with one image runs as a container; with several, as a podman pod
+(primary + sidecars sharing localhost).
 
 Vault setup (one-time):
 

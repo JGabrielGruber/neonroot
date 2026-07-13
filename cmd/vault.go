@@ -127,12 +127,72 @@ this only forgets the registration.`,
 	},
 }
 
+var (
+	vaultSetRenameFlag string
+	vaultSetPathFlag   string
+)
+
+var vaultSetCmd = &cobra.Command{
+	Use:   "set <name>",
+	Short: "Edit a vault's registration (name, path)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+		f := cmd.Flags()
+		v, ok := app.Config.Vault(name)
+		if !ok {
+			return fmt.Errorf("%w: %q", domain.ErrVaultNotFound, name)
+		}
+		if f.Changed("rename") {
+			if name == config.ScratchVaultName {
+				return fmt.Errorf("cannot rename the built-in scratch vault")
+			}
+			if _, exists := app.Config.Vault(vaultSetRenameFlag); exists {
+				return fmt.Errorf("vault %q already exists", vaultSetRenameFlag)
+			}
+			if app.Config.DefaultVault == name {
+				app.Config.DefaultVault = vaultSetRenameFlag
+			}
+			v.Name = vaultSetRenameFlag
+		}
+		if f.Changed("path") {
+			if !filepath.IsAbs(vaultSetPathFlag) {
+				return fmt.Errorf("path must be absolute: %s", vaultSetPathFlag)
+			}
+			v.Path = filepath.Clean(vaultSetPathFlag)
+		}
+		// AddVault replaces by name; on rename it also drops the old entry.
+		if f.Changed("rename") {
+			removeVault(name)
+		}
+		app.Config.AddVault(v)
+		if err := saveConfig(); err != nil {
+			return err
+		}
+		app.UI.Success(fmt.Sprintf("updated vault %q", v.Name))
+		return nil
+	},
+}
+
+// removeVault drops a vault from config by name (in place).
+func removeVault(name string) {
+	kept := app.Config.Vaults[:0:0]
+	for _, v := range app.Config.Vaults {
+		if v.Name != name {
+			kept = append(kept, v)
+		}
+	}
+	app.Config.Vaults = kept
+}
+
 // saveConfig persists the config to the card.
 func saveConfig() error {
 	return config.Save(app.Config, filepath.Join(app.Paths.Config, "config.toml"))
 }
 
 func init() {
-	vaultCmd.AddCommand(vaultAddCmd, vaultListCmd, vaultSetDefaultCmd, vaultRmCmd)
+	vaultSetCmd.Flags().StringVar(&vaultSetRenameFlag, "rename", "", "rename the vault")
+	vaultSetCmd.Flags().StringVar(&vaultSetPathFlag, "path", "", "change the vault's path")
+	vaultCmd.AddCommand(vaultAddCmd, vaultListCmd, vaultSetDefaultCmd, vaultRmCmd, vaultSetCmd)
 	rootCmd.AddCommand(vaultCmd)
 }

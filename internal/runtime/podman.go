@@ -194,6 +194,13 @@ func (p *Podman) Commit(ctx context.Context, containerID, ref string) error {
 	return err
 }
 
+// Tag adds a new reference to an existing image.
+func (p *Podman) Tag(ctx context.Context, from, to string) error {
+	args := append(p.baseArgs(), "tag", from, to)
+	_, err := p.Runner.Run(ctx, "podman", args...)
+	return err
+}
+
 // Save writes an image's data to a tarball (podman save), for storage in a vault.
 // A prior tar is removed first — podman's docker-archive format cannot write
 // over an existing archive, and a save always produces a complete new one.

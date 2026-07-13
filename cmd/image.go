@@ -224,15 +224,95 @@ vault. This is how inside-container changes become durable and reproducible.`,
 	},
 }
 
+var imageRenameFlag string
+
+var imageSetCmd = &cobra.Command{
+	Use:   "set <name>",
+	Short: "Edit an image (rename)",
+	Long: `Renames an image: moves its definition + data in the vault, re-tags the
+stored image data, and updates every workspace that references it.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+		if !cmd.Flags().Changed("rename") {
+			return fmt.Errorf("nothing to set — use --rename <newname>")
+		}
+		newName := imageRenameFlag
+
+		v, err := app.resolveVault(imageVaultFlag)
+		if err != nil {
+			return err
+		}
+		if err := app.requireAvailable(v); err != nil {
+			return err
+		}
+		if _, err := os.Stat(vault.ImageDir(v.Path, name)); err != nil {
+			return fmt.Errorf("no image %q in vault %q", name, v.Name)
+		}
+		if _, err := os.Stat(vault.ImageDir(v.Path, newName)); err == nil {
+			return fmt.Errorf("image %q already exists in vault %q", newName, v.Name)
+		}
+
+		lock, err := app.lock("vault-" + v.Name)
+		if err != nil {
+			return err
+		}
+		defer lock.Unlock()
+
+		// Move the definition + data directory.
+		if err := os.Rename(vault.ImageDir(v.Path, name), vault.ImageDir(v.Path, newName)); err != nil {
+			return err
+		}
+
+		// Re-tag the stored image data so its internal ref matches the new name.
+		if _, err := os.Stat(vault.ImageTarPath(v.Path, newName)); err == nil {
+			pod, perr := app.podman()
+			if perr == nil && pod.Available() {
+				oldRef, newRef := vault.ImageRef(name), vault.ImageRef(newName)
+				tar := vault.ImageTarPath(v.Path, newName)
+				if err := pod.LoadImage(cmd.Context(), tar); err == nil {
+					_ = pod.Tag(cmd.Context(), oldRef, newRef)
+					_ = pod.Save(cmd.Context(), newRef, tar)
+				}
+			} else {
+				app.UI.Warn(fmt.Sprintf("rebuild to refresh its data: 'neonroot image build %s'", newName))
+			}
+		}
+
+		// Update workspaces that reference the old image name.
+		if idx, err := vault.ReadIndex(v.Path); err == nil {
+			changed := false
+			for i := range idx.Workspaces {
+				for j, img := range idx.Workspaces[i].Images {
+					if img == name {
+						idx.Workspaces[i].Images[j] = newName
+						changed = true
+					}
+				}
+			}
+			if changed {
+				vault.Bump(idx)
+				if err := vault.WriteIndex(v.Path, idx); err != nil {
+					return err
+				}
+			}
+		}
+
+		app.UI.Success(fmt.Sprintf("renamed image %q → %q in vault %q", name, newName, v.Name))
+		return nil
+	},
+}
+
 // podBaseArgs exposes the storage-pinning args for ad-hoc podman calls.
 func podBaseArgs(p *runtime.Podman) []string {
 	return []string{"--root", p.GraphRoot, "--runroot", p.RunRoot}
 }
 
 func init() {
-	for _, c := range []*cobra.Command{imageCreateCmd, imageBuildCmd, imageLsCmd, imageRmCmd} {
+	for _, c := range []*cobra.Command{imageCreateCmd, imageBuildCmd, imageLsCmd, imageRmCmd, imageSetCmd} {
 		c.Flags().StringVar(&imageVaultFlag, "vault", "", "vault holding the image (default: configured default vault)")
 	}
-	imageCmd.AddCommand(imageCreateCmd, imageBuildCmd, imageLsCmd, imageRmCmd, imageSnapshotCmd)
+	imageSetCmd.Flags().StringVar(&imageRenameFlag, "rename", "", "rename the image")
+	imageCmd.AddCommand(imageCreateCmd, imageBuildCmd, imageLsCmd, imageRmCmd, imageSnapshotCmd, imageSetCmd)
 	rootCmd.AddCommand(imageCmd)
 }

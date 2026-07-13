@@ -25,6 +25,7 @@ Workspace commands (the everyday surface):
 | `commit <name>` | `git commit` + `git push` back (refuses on conflict; `--rebase`/`--as`/`--force`) |
 | `status [name]` | Vault overview, or a workspace's live git state (dirty/ahead/behind) |
 | `snapshot <name> <label>` | Tag a durable point-in-time copy of the workspace |
+| `set <name> [flags]` | Edit attributes — `--rename`, `--image`, `--add-image`, `--remove-image`, `--mount`, `--no-image` |
 | `stop <name>`   | Stop the container/pod + session and drop the tmpfs copy |
 | `rm <name>`     | Delete a workspace from its vault (stop it first) |
 
@@ -38,6 +39,7 @@ Image management (`neonroot image …`):
 | `image create <name>` | Scaffold a Containerfile in the vault |
 | `image build <name>`  | Build (online) + save the image's data into the vault |
 | `image ls` / `rm <name>` | List / remove vault images |
+| `image set <name> --rename <new>` | Rename an image (re-tags data + updates workspaces) |
 | `image snapshot <ws>` | Commit a running container back into its vault image |
 
 A workspace with one image runs as a container; with several, as a podman pod
@@ -50,6 +52,7 @@ Vault setup (one-time):
 | `vault add <name> <path>` | Register a vault; the first becomes the default |
 | `vault list`              | List vaults and availability |
 | `vault set-default <name>`| Change the default vault |
+| `vault set <name> [--rename\|--path]` | Edit a vault's registration |
 | `vault rm <name>`         | Unregister a vault (drive data untouched) |
 
 Workspace commands default to the configured default vault (no `--vault` needed);

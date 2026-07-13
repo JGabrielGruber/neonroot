@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	loadRepoFlag  string
-	loadNoSession bool
+	loadRepoFlag    string
+	loadNoSession   bool
+	loadNoContainer bool
 )
 
 var loadCmd = &cobra.Command{
@@ -37,7 +38,7 @@ you can attach to.`,
 		}
 		defer lock.Unlock()
 
-		loader := &workspace.Loader{Paths: app.Paths, UI: app.UI}
+		loader := &workspace.Loader{Paths: app.Paths, UI: app.UI, NoContainer: loadNoContainer}
 		if !loadNoSession {
 			tmux := &session.Tmux{Runner: app.Runner}
 			if tmux.Available() {
@@ -45,6 +46,13 @@ you can attach to.`,
 			} else {
 				app.UI.Warn("tmux not found on PATH — loading without a session")
 			}
+		}
+		if !loadNoContainer {
+			pod, err := app.podman()
+			if err != nil {
+				return err
+			}
+			loader.Runtime = pod
 		}
 
 		ws, err := loader.Load(r, name)
@@ -63,5 +71,6 @@ you can attach to.`,
 func init() {
 	loadCmd.Flags().StringVarP(&loadRepoFlag, "repo", "r", "", "source repo (default: configured default repo)")
 	loadCmd.Flags().BoolVar(&loadNoSession, "no-session", false, "do not start a tmux session")
+	loadCmd.Flags().BoolVar(&loadNoContainer, "no-container", false, "run host-only even if the workspace declares an image")
 	rootCmd.AddCommand(loadCmd)
 }

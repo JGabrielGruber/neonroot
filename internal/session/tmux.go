@@ -52,8 +52,10 @@ func (t *Tmux) Exists(workspace string) (bool, error) {
 }
 
 // Ensure starts a detached session for the workspace rooted at dir if one is
-// not already running. Idempotent.
-func (t *Tmux) Ensure(workspace, dir string) error {
+// not already running. If command is non-empty it becomes the session's initial
+// command (e.g. `podman exec` into the workspace's container); otherwise tmux
+// starts the user's default shell. Idempotent.
+func (t *Tmux) Ensure(workspace, dir string, command []string) error {
 	ok, err := t.Exists(workspace)
 	if err != nil {
 		return err
@@ -61,8 +63,9 @@ func (t *Tmux) Ensure(workspace, dir string) error {
 	if ok {
 		return nil
 	}
-	_, err = t.Runner.Run(context.Background(),
-		"tmux", "new-session", "-d", "-s", Name(workspace), "-c", dir)
+	args := []string{"new-session", "-d", "-s", Name(workspace), "-c", dir}
+	args = append(args, command...)
+	_, err = t.Runner.Run(context.Background(), "tmux", args...)
 	return err
 }
 

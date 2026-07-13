@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -104,13 +105,33 @@ func TestLoad_UnavailableRepo(t *testing.T) {
 
 // fakeSessions records Ensure calls and can be made to fail.
 type fakeSessions struct {
-	dir string
-	err error
+	dir     string
+	command []string
+	err     error
 }
 
-func (f *fakeSessions) Ensure(_, dir string) error {
+func (f *fakeSessions) Ensure(_, dir string, command []string) error {
 	f.dir = dir
+	f.command = command
 	return f.err
+}
+
+// fakeRuntime records container starts and returns a canned ID.
+type fakeRuntime struct {
+	available bool
+	started   []string // images started
+	id        string
+}
+
+func (f *fakeRuntime) Available() bool { return f.available }
+
+func (f *fakeRuntime) Start(_ context.Context, image, _, _ string) (string, error) {
+	f.started = append(f.started, image)
+	return f.id, nil
+}
+
+func (f *fakeRuntime) ExecArgs(id string) []string {
+	return []string{"podman", "exec", "-it", id, "/bin/bash"}
 }
 
 func TestLoad_StartsSessionAtWorkspaceRoot(t *testing.T) {
@@ -124,6 +145,82 @@ func TestLoad_StartsSessionAtWorkspaceRoot(t *testing.T) {
 	}
 	if sess.dir != ws.Root {
 		t.Errorf("session started at %q, want workspace root %q", sess.dir, ws.Root)
+	}
+}
+
+// setImage rewrites a repo's index to give a workspace an image binding.
+func setImage(t *testing.T, repoPath, ws, image string) {
+	t.Helper()
+	idx, err := repo.ReadIndex(repoPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range idx.Workspaces {
+		if idx.Workspaces[i].Name == ws {
+			idx.Workspaces[i].Image = image
+		}
+	}
+	if err := repo.WriteIndex(repoPath, idx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoad_StartsContainerWhenImageDeclared(t *testing.T) {
+	loader, r := testEnv(t)
+	setImage(t, r.Path, "app", "localhost/arch-minimal")
+	rt := &fakeRuntime{available: true, id: "cid123"}
+	loader.Runtime = rt
+	sess := &fakeSessions{}
+	loader.Sessions = sess
+
+	ws, err := loader.Load(r, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rt.started) != 1 || rt.started[0] != "localhost/arch-minimal" {
+		t.Errorf("container not started for declared image: %v", rt.started)
+	}
+	if ws.ContainerID != "cid123" {
+		t.Errorf("container id not recorded: %q", ws.ContainerID)
+	}
+	// The session must exec into the container.
+	if len(sess.command) == 0 || sess.command[0] != "podman" {
+		t.Errorf("session should run the container exec command, got %v", sess.command)
+	}
+}
+
+func TestLoad_NoContainerFlagStaysHostOnly(t *testing.T) {
+	loader, r := testEnv(t)
+	setImage(t, r.Path, "app", "localhost/arch-minimal")
+	rt := &fakeRuntime{available: true, id: "cid"}
+	loader.Runtime = rt
+	loader.NoContainer = true
+	sess := &fakeSessions{}
+	loader.Sessions = sess
+
+	ws, err := loader.Load(r, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rt.started) != 0 {
+		t.Errorf("--no-container must not start a container, got %v", rt.started)
+	}
+	if ws.ContainerID != "" || len(sess.command) != 0 {
+		t.Errorf("expected host-only session, got cid=%q cmd=%v", ws.ContainerID, sess.command)
+	}
+}
+
+func TestLoad_HostOnlyWhenNoImage(t *testing.T) {
+	loader, r := testEnv(t) // "app" has no image
+	rt := &fakeRuntime{available: true, id: "cid"}
+	loader.Runtime = rt
+	loader.Sessions = &fakeSessions{}
+
+	if _, err := loader.Load(r, "app"); err != nil {
+		t.Fatal(err)
+	}
+	if len(rt.started) != 0 {
+		t.Errorf("workspace without an image must not start a container")
 	}
 }
 

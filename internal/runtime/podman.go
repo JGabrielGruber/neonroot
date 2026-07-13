@@ -69,9 +69,11 @@ func (p *Podman) Version(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-// Run starts a detached container and returns its ID.
+// Run starts a detached container and returns its ID. Images are always local
+// base images, so --pull=never makes a missing image fail fast instead of
+// hitting a registry.
 func (p *Podman) Run(ctx context.Context, spec RunSpec) (string, error) {
-	args := append(p.baseArgs(), "run", "-d")
+	args := append(p.baseArgs(), "run", "-d", "--pull=never")
 	if spec.Name != "" {
 		args = append(args, "--name", spec.Name)
 	}
@@ -94,4 +96,26 @@ func (p *Podman) Stop(ctx context.Context, id string) error {
 	args := append(p.baseArgs(), "rm", "-f", id)
 	_, err := p.Runner.Run(ctx, "podman", args...)
 	return err
+}
+
+// Start launches a long-lived detached container for a workspace (kept alive
+// with `sleep infinity`) with the tmpfs workspace bind-mounted at /workspace,
+// and returns its container ID. A session then execs a shell into it.
+func (p *Podman) Start(ctx context.Context, image, name, workspaceDir string) (string, error) {
+	return p.Run(ctx, RunSpec{
+		Image:        image,
+		Name:         name,
+		WorkspaceDir: workspaceDir,
+		MountTarget:  "/workspace",
+		Command:      []string{"sleep", "infinity"},
+	})
+}
+
+// ExecArgs returns the full command (argv) to open an interactive shell inside a
+// container. It carries the tmpfs storage roots so the container — which lives
+// in the tmpfs graphroot — is found. Callers run this as a session command.
+func (p *Podman) ExecArgs(id string) []string {
+	argv := []string{"podman"}
+	argv = append(argv, p.baseArgs()...)
+	return append(argv, "exec", "-it", id, "/bin/bash")
 }

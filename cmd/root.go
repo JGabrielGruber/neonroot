@@ -12,6 +12,7 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 	"github.com/JGabrielGruber/neonroot/internal/repo"
+	"github.com/JGabrielGruber/neonroot/internal/runtime"
 	"github.com/JGabrielGruber/neonroot/internal/ui"
 )
 
@@ -120,6 +121,19 @@ func (a *App) requireAvailable(r domain.Repo) error {
 			domain.ErrRepoUnavailable, r.Name, r.Path)
 	}
 	return nil
+}
+
+// podman builds the Podman adapter with storage pinned to tmpfs, creating the
+// container roots on first use.
+func (a *App) podman() (*runtime.Podman, error) {
+	graph := a.Paths.ContainersGraphRoot()
+	run := a.Paths.ContainersRunRoot()
+	for _, d := range []string{graph, run} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			return nil, err
+		}
+	}
+	return &runtime.Podman{Runner: a.Runner, GraphRoot: graph, RunRoot: run}, nil
 }
 
 // lock takes a non-blocking advisory lock under the runtime tmpfs (never the

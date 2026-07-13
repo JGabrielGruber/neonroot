@@ -55,10 +55,36 @@ func TestPodman_RunBuildsArgs(t *testing.T) {
 		t.Errorf("id = %q, want abc123", id)
 	}
 	want := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers " +
-		"run -d --name nr-webapp -v /tmp/nr/workspaces/webapp:/workspace -w /workspace " +
+		"run -d --pull=never --name nr-webapp -v /tmp/nr/workspaces/webapp:/workspace -w /workspace " +
 		"localhost/arch-minimal sleep infinity"
 	if got := rec.Lines()[0]; got != want {
 		t.Errorf("run args:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestPodman_StartKeepsAlive(t *testing.T) {
+	rec := runnertest.New()
+	rec.Stdout["podman"] = "cid\n"
+	if _, err := newPodman(rec).Start(context.Background(), "img", "nr-app", "/tmp/nr/workspaces/app"); err != nil {
+		t.Fatal(err)
+	}
+	want := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers " +
+		"run -d --pull=never --name nr-app -v /tmp/nr/workspaces/app:/workspace -w /workspace img sleep infinity"
+	if got := rec.Lines()[0]; got != want {
+		t.Errorf("start args:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestPodman_ExecArgs(t *testing.T) {
+	got := newPodman(runnertest.New()).ExecArgs("cid")
+	want := []string{"podman", "--root", "/tmp/nr/containers", "--runroot", "/run/user/1000/nr/containers", "exec", "-it", "cid", "/bin/bash"}
+	if len(got) != len(want) {
+		t.Fatalf("ExecArgs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ExecArgs[%d] = %q, want %q", i, got[i], want[i])
+		}
 	}
 }
 

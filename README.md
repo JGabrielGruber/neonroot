@@ -16,9 +16,9 @@ drive when you choose. It never writes to the SD card it boots from.
 | `status`   | ✅ working | Show repos, availability, and contents |
 | `create`   | ✅ working | Create a workspace (template or `--from`), optional `--image` |
 | `repo add` | ✅ working | Register a repo path in config |
-| `load`     | ✅ working | Hydrate a workspace into tmpfs + start a tmux session |
-| `attach`   | ✅ working | Attach to a loaded workspace's tmux session |
-| `stop`     | ✅ working | Kill the session and drop the tmpfs copy |
+| `load`     | ✅ working | Hydrate into tmpfs; start a container (if image) + tmux session |
+| `attach`   | ✅ working | Attach to a loaded workspace's session (inside its container) |
+| `stop`     | ✅ working | Stop the container/session and drop the tmpfs copy |
 | `commit`   | ✅ working | Write workspace changes back to a repo |
 | `status`   | ✅ working | Repo availability, or a workspace's pending diff |
 

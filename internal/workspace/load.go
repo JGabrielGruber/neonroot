@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -19,8 +20,23 @@ import (
 // consumer) keeps workspace decoupled from the concrete tmux adapter, which
 // satisfies this interface structurally.
 type Sessions interface {
-	// Ensure starts a session for the workspace rooted at dir if absent.
-	Ensure(workspace, dir string) error
+	// Ensure starts a session for the workspace rooted at dir if absent. A
+	// non-empty command becomes the session's initial command (e.g. exec into a
+	// container); empty means the default shell.
+	Ensure(workspace, dir string, command []string) error
+}
+
+// Runtime is the optional container capability Load uses. A workspace that
+// declares an image is started inside a container; one that does not (or when
+// the runtime is unavailable) runs host-only.
+type Runtime interface {
+	// Available reports whether the container runtime is usable.
+	Available() bool
+	// Start launches a container for the workspace bind-mounted at
+	// workspaceDir and returns its ID.
+	Start(ctx context.Context, image, name, workspaceDir string) (string, error)
+	// ExecArgs returns the session command to open a shell inside the container.
+	ExecArgs(containerID string) []string
 }
 
 // Loader hydrates workspaces from repos into tmpfs.
@@ -30,6 +46,10 @@ type Loader struct {
 	// Sessions, if set, starts a host session for the workspace after
 	// hydration. A session failure degrades gracefully — it never fails a load.
 	Sessions Sessions
+	// Runtime, if set, starts a container for workspaces that declare an image.
+	Runtime Runtime
+	// NoContainer forces host-only even when a workspace declares an image.
+	NoContainer bool
 }
 
 // Load hydrates the named workspace from repo r into tmpfs and records the
@@ -88,18 +108,41 @@ func (l *Loader) Load(r domain.Repo, name string) (*domain.Workspace, error) {
 		Root:              dst,
 		HydratedAt:        time.Now().UTC().Format(time.RFC3339),
 		SourceFingerprint: repo.Fingerprint(idx),
+		Image:             entry.Image,
 	}
 	if err := WriteState(l.Paths, ws); err != nil {
 		return nil, err
+	}
+
+	// Optionally start a container for a workspace that declares an image. The
+	// session then execs a shell inside it; otherwise the session is host-only.
+	// Any container failure degrades to host-only — it never fails the load.
+	var command []string
+	if entry.Image != "" && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
+		l.UI.Step(fmt.Sprintf("starting container (%s)", entry.Image))
+		cid, err := l.Runtime.Start(context.Background(), entry.Image, containerName(name), dst)
+		if err != nil {
+			l.UI.Warn(fmt.Sprintf("container not started (host-only): %v", err))
+		} else {
+			ws.ContainerID = cid
+			command = l.Runtime.ExecArgs(cid)
+			if err := WriteState(l.Paths, ws); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// Start a host session so the user can attach immediately. Graceful
 	// degradation: if tmux is missing or errors, the workspace is still loaded.
 	if l.Sessions != nil {
 		l.UI.Step("starting session")
-		if err := l.Sessions.Ensure(name, dst); err != nil {
+		if err := l.Sessions.Ensure(name, dst, command); err != nil {
 			l.UI.Warn(fmt.Sprintf("session not started (workspace is still loaded): %v", err))
 		}
 	}
 	return ws, nil
 }
+
+// containerName derives a stable container name from a workspace name, matching
+// the session naming so the two are easy to correlate.
+func containerName(workspace string) string { return "nr-" + workspace }

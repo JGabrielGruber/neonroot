@@ -26,7 +26,7 @@ func TestEnsure_CreatesWhenAbsent(t *testing.T) {
 	}
 	tm := &Tmux{Runner: rec}
 
-	if err := tm.Ensure("webapp", "/tmp/ws/webapp"); err != nil {
+	if err := tm.Ensure("webapp", "/tmp/ws/webapp", nil); err != nil {
 		t.Fatal(err)
 	}
 	lines := rec.Lines()
@@ -43,7 +43,7 @@ func TestEnsure_NoOpWhenPresent(t *testing.T) {
 	rec := runnertest.New() // all calls succeed → has-session reports present
 	tm := &Tmux{Runner: rec}
 
-	if err := tm.Ensure("webapp", "/tmp/ws/webapp"); err != nil {
+	if err := tm.Ensure("webapp", "/tmp/ws/webapp", nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := len(rec.Calls); got != 1 {

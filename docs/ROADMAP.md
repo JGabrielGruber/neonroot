@@ -144,9 +144,28 @@ testable deliverable (unit-testable with fakes; no drive/Podman needed until Pha
   and diff-mode `status <ws>` are real. Verified end-to-end: edit → status diff →
   commit → drive updated → clean; conflict → exit 5; `--as` copy; `--force`
   override. hydration refactored to share identity/copy helpers with commit.
-- **Phase 5 — Polish.** Multi-bar hydration, `--quiet`/`--json`, `env`/Bananenv
-  provisioning hook, shell completion, richer `status`/interactive `list`, docs.
-  Deferred: overlayfs experiment, udev plug detection.
+- **Phase 5 — Model completion + polish.** ✅ **Core done.**
+  - Content model: shipped default template (go:embed) + `create --from` copying
+    an existing workspace; optional `image` on a workspace; `list workspaces`.
+  - Runtime: `load` starts a container for workspaces that declare an image
+    (`--pull=never`, workspace bind-mounted at `/workspace`), tmux execs a shell
+    inside it; `--no-container` and graceful degrade to host-only. `stop` stops
+    the container.
+  - **Risk retired:** validated rootless Podman with graphroot on tmpfs
+    (`/dev/shm`, overlay driver) runs containers successfully (podman 5.8.3).
+  - **Still polish/backlog:** multi-bar hydration, `--json`, `env`/Bananenv hook,
+    shell completion, interactive Bubble Tea `list`.
+
+## Follow-ups surfaced during Phase 5 (tmpfs container storage)
+
+1. **Base images must be populated into the tmpfs graphroot each boot** — a
+   relocated graphroot starts empty and does not persist. NeonRoot needs to build
+   from `bases/` or `podman load` base images into the tmpfs store before `load`
+   can start a container after a fresh boot. This is the missing link that makes
+   declared images actually runnable. (Not yet built.)
+2. **Cleaning the rootless graphroot needs `podman unshare rm` / `podman system
+   reset`**, not `os.RemoveAll` — layer dirs are owned by subuid-mapped users.
+   Moot across reboots (tmpfs clears), but relevant to any in-session wipe.
 
 ## Out of scope (at least initially)
 

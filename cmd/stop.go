@@ -30,11 +30,27 @@ them.`,
 		}
 		defer lock.Unlock()
 
+		ws, err := workspace.ReadState(app.Paths, name)
+		if err != nil {
+			return err
+		}
+
 		// Kill the session (best-effort — tmux may be absent or already gone).
 		tmux := &session.Tmux{Runner: app.Runner}
 		if tmux.Available() {
 			if err := tmux.Kill(name); err != nil {
 				app.UI.Warn(fmt.Sprintf("could not kill session: %v", err))
+			}
+		}
+
+		// Stop the container, if this workspace had one.
+		if ws.ContainerID != "" {
+			pod, err := app.podman()
+			if err != nil {
+				return err
+			}
+			if err := pod.Stop(cmd.Context(), ws.ContainerID); err != nil {
+				app.UI.Warn(fmt.Sprintf("could not stop container: %v", err))
 			}
 		}
 

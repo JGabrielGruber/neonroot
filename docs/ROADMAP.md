@@ -154,8 +154,12 @@ available.
   `internal/hydration` (both deleted, workspace state shrunk, git owns content
   history). Verified end-to-end with real git: create→load→edit→commit→push;
   reuse; conflict→exit 5; --clean; offline (usable untethered, commit→exit 3).
-- **Phase E — Conflict-resolution flags.** `commit --rebase`/`--merge`, `--as
-  <branch>`, `--force`→`--force-with-lease`.
+- **Phase E — Conflict-resolution flags.** ✅ **Done.** On a rejected push,
+  `commit` refuses by default and offers `--rebase`/`--merge` (integrate then
+  push; on unresolvable conflict, tells you to fix in the workspace and re-run),
+  `--as <name>` (push to a new branch — no conflict), and `--force` (mapped to
+  `git push --force-with-lease`, which still refuses a concurrent writer).
+  Verified with real git.
 - **Phase F — Image data in the vault.** `images/<name>/{Containerfile,image.tar}`;
   `load` does `podman load` **straight from the drive** (tar never staged in RAM).
   Image reference modeled as a **list** from the start; `image build` producer;

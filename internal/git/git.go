@@ -160,6 +160,68 @@ func (g *Git) Push(ctx context.Context, worktree string) (rejected bool, err err
 	return false, err
 }
 
+// PushBranch pushes the current HEAD to a named branch in origin. This is the
+// cheap "save a copy under a new name" (`commit --as <name>`): it never touches
+// the main branch, so it can't conflict.
+func (g *Git) PushBranch(ctx context.Context, worktree, branch string) error {
+	_, err := g.run(ctx, worktree, "push", "-q", "origin", "HEAD:refs/heads/"+branch)
+	return err
+}
+
+// PushForceWithLease force-pushes but refuses if origin moved since our last
+// fetch — the non-destructive form of --force. rejected=true means a concurrent
+// writer pushed (the lease was stale), which must still not be overwritten.
+func (g *Git) PushForceWithLease(ctx context.Context, worktree string) (rejected bool, err error) {
+	_, err = g.run(ctx, worktree, "push", "-q", "--force-with-lease", "origin", defaultBranch)
+	if err == nil {
+		return false, nil
+	}
+	if isNonFastForward(err) || isStaleLease(err) {
+		return true, nil
+	}
+	return false, err
+}
+
+// Pull integrates origin's changes into the working tree (rebase or merge) so a
+// subsequent push fast-forwards. conflicted=true (no error) means git could not
+// auto-resolve and left the tree in a conflicted state for the user to fix.
+func (g *Git) Pull(ctx context.Context, worktree string, rebase bool) (conflicted bool, err error) {
+	mode := "--no-rebase"
+	if rebase {
+		mode = "--rebase"
+	}
+	_, err = g.run(ctx, worktree,
+		"-c", "user.name=neonroot", "-c", "user.email=neonroot@localhost",
+		"pull", "-q", mode, "origin", defaultBranch)
+	if err == nil {
+		return false, nil
+	}
+	if isMergeConflict(err) {
+		return true, nil
+	}
+	return false, err
+}
+
+func isMergeConflict(err error) bool {
+	var runErr *platform.RunError
+	if !errors.As(err, &runErr) {
+		return false
+	}
+	s := runErr.Stderr + runErr.Err.Error()
+	return strings.Contains(s, "CONFLICT") ||
+		strings.Contains(s, "conflict") ||
+		strings.Contains(s, "could not apply") ||
+		strings.Contains(s, "Merge conflict")
+}
+
+func isStaleLease(err error) bool {
+	var runErr *platform.RunError
+	if !errors.As(err, &runErr) {
+		return false
+	}
+	return strings.Contains(runErr.Stderr, "stale info")
+}
+
 // isNonFastForward inspects a push error's stderr for git's rejection markers.
 func isNonFastForward(err error) bool {
 	var runErr *platform.RunError

@@ -10,13 +10,13 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/hydration"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
-	"github.com/JGabrielGruber/neonroot/internal/repo"
 	"github.com/JGabrielGruber/neonroot/internal/ui"
+	"github.com/JGabrielGruber/neonroot/internal/vault"
 	"github.com/JGabrielGruber/neonroot/internal/workspace"
 )
 
-// Committer writes a loaded workspace's changes back to a repo. It assumes the
-// caller has already verified the target repo is available and taken the repo
+// Committer writes a loaded workspace's changes back to a vault. It assumes the
+// caller has already verified the target vault is available and taken the vault
 // lock.
 type Committer struct {
 	Paths platform.Paths
@@ -42,23 +42,23 @@ type Result struct {
 	SavedAs bool
 	// FileCount is the number of files written for a save-as.
 	FileCount int
-	// Revision is the target repo's index revision after the commit.
+	// Revision is the target vault's index revision after the commit.
 	Revision int64
 }
 
-// Commit writes ws's changes to the target repo. In-place (same repo, same
+// Commit writes ws's changes to the target vault. In-place (same vault, same
 // name) applies only the diff after a conflict check; otherwise it snapshots the
-// whole workspace to a new name/repo (save-as).
-func (c *Committer) Commit(ws *domain.Workspace, target domain.Repo, opt Options) (*Result, error) {
+// whole workspace to a new name/vault (save-as).
+func (c *Committer) Commit(ws *domain.Workspace, target domain.Vault, opt Options) (*Result, error) {
 	manPath := c.Paths.ManifestPath(ws.Name)
 	man, err := hydration.ReadManifest(manPath)
 	if err != nil {
 		return nil, err
 	}
 
-	idx, err := repo.ReadIndex(target.Path)
+	idx, err := vault.ReadIndex(target.Path)
 	if errors.Is(err, fs.ErrNotExist) {
-		idx = repo.NewIndex()
+		idx = vault.NewIndex()
 	} else if err != nil {
 		return nil, err
 	}
@@ -67,12 +67,12 @@ func (c *Committer) Commit(ws *domain.Workspace, target domain.Repo, opt Options
 	if opt.AsName != "" {
 		targetName = opt.AsName
 	}
-	inPlace := opt.AsName == "" && target.Name == ws.SourceRepo
+	inPlace := opt.AsName == "" && target.Name == ws.SourceVault
 	res := &Result{TargetRepo: target.Name, TargetName: targetName}
 
 	if inPlace {
-		if HasConflict(repo.Fingerprint(idx), ws.SourceFingerprint) && !opt.Force {
-			return nil, fmt.Errorf("%w: repo %q advanced to revision %d (loaded at %d) — use --force to overwrite or --as <name> to save a copy",
+		if HasConflict(vault.Fingerprint(idx), ws.SourceFingerprint) && !opt.Force {
+			return nil, fmt.Errorf("%w: vault %q advanced to revision %d (loaded at %d) — use --force to overwrite or --as <name> to save a copy",
 				domain.ErrCommitConflict, target.Name, idx.Revision, ws.SourceFingerprint.Revision)
 		}
 		changes, err := Diff(ws.Root, man)
@@ -81,11 +81,11 @@ func (c *Committer) Commit(ws *domain.Workspace, target domain.Repo, opt Options
 		}
 		res.Changes = changes
 		if len(changes) == 0 {
-			return res, nil // nothing to commit; leave the repo untouched
+			return res, nil // nothing to commit; leave the vault untouched
 		}
-		entry, ok := repo.Workspace(idx, ws.Name)
+		entry, ok := vault.Workspace(idx, ws.Name)
 		if !ok {
-			return nil, fmt.Errorf("%w: %q missing from repo index", domain.ErrWorkspaceNotFound, ws.Name)
+			return nil, fmt.Errorf("%w: %q missing from vault index", domain.ErrWorkspaceNotFound, ws.Name)
 		}
 		if err := ApplyDiff(ws.Root, filepath.Join(target.Path, entry.Root), changes); err != nil {
 			return nil, err
@@ -98,9 +98,9 @@ func (c *Committer) Commit(ws *domain.Workspace, target domain.Repo, opt Options
 			return nil, err
 		}
 	} else {
-		existing, exists := repo.Workspace(idx, targetName)
+		existing, exists := vault.Workspace(idx, targetName)
 		if exists && !opt.Force {
-			return nil, fmt.Errorf("%w: %q in repo %q — use --force to overwrite",
+			return nil, fmt.Errorf("%w: %q in vault %q — use --force to overwrite",
 				domain.ErrWorkspaceExists, targetName, target.Name)
 		}
 		root := filepath.Join("workspaces", targetName)
@@ -122,16 +122,16 @@ func (c *Committer) Commit(ws *domain.Workspace, target domain.Repo, opt Options
 		res.FileCount = len(copied.Files)
 	}
 
-	repo.Bump(idx)
-	if err := repo.WriteIndex(target.Path, idx); err != nil {
+	vault.Bump(idx)
+	if err := vault.WriteIndex(target.Path, idx); err != nil {
 		return nil, err
 	}
 	res.Revision = idx.Revision
 
-	// If we advanced the workspace's own source repo, refresh its fingerprint so
+	// If we advanced the workspace's own source vault, refresh its fingerprint so
 	// a later in-place commit does not see this commit as a conflict.
-	if target.Name == ws.SourceRepo {
-		ws.SourceFingerprint = repo.Fingerprint(idx)
+	if target.Name == ws.SourceVault {
+		ws.SourceFingerprint = vault.Fingerprint(idx)
 		if err := workspace.WriteState(c.Paths, ws); err != nil {
 			return nil, err
 		}

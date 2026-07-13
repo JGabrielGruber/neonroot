@@ -10,15 +10,15 @@ import (
 )
 
 var (
-	loadRepoFlag    string
+	loadVaultFlag   string
 	loadNoSession   bool
 	loadNoContainer bool
 )
 
 var loadCmd = &cobra.Command{
 	Use:   "load <workspace>",
-	Short: "Hydrate a workspace from a repo into tmpfs",
-	Long: `Copies a workspace from its repo on cold storage into tmpfs (RAM) so you
+	Short: "Hydrate a workspace from a vault into tmpfs",
+	Long: `Copies a workspace from its vault on cold storage into tmpfs (RAM) so you
 can unplug the drive and work untethered. Records a manifest of what was copied
 so a later commit can compute exactly what changed, and starts a tmux session
 you can attach to.`,
@@ -26,7 +26,7 @@ you can attach to.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 
-		r, err := app.resolveRepo(loadRepoFlag)
+		r, err := app.resolveVault(loadVaultFlag)
 		if err != nil {
 			return err
 		}
@@ -69,7 +69,7 @@ you can attach to.`,
 }
 
 func init() {
-	loadCmd.Flags().StringVarP(&loadRepoFlag, "repo", "r", "", "source repo (default: configured default repo)")
+	loadCmd.Flags().StringVarP(&loadVaultFlag, "vault", "", "", "source vault (default: configured default vault)")
 	loadCmd.Flags().BoolVar(&loadNoSession, "no-session", false, "do not start a tmux session")
 	loadCmd.Flags().BoolVar(&loadNoContainer, "no-container", false, "run host-only even if the workspace declares an image")
 	rootCmd.AddCommand(loadCmd)

@@ -83,7 +83,7 @@ func TestDiff_UnchangedIsEmpty(t *testing.T) {
 }
 
 func TestApplyDiff_AndRebaseline(t *testing.T) {
-	repo, ws, man := hydrateFixture(t)
+	vault, ws, man := hydrateFixture(t)
 
 	write(t, filepath.Join(ws, "pkg", "a.go"), "package pkg // edited\n")
 	write(t, filepath.Join(ws, "new.go"), "package new\n")
@@ -93,19 +93,19 @@ func TestApplyDiff_AndRebaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ApplyDiff(ws, repo, changes); err != nil {
+	if err := ApplyDiff(ws, vault, changes); err != nil {
 		t.Fatal(err)
 	}
 
-	// The repo now mirrors the workspace.
-	if got := readFile(t, filepath.Join(repo, "pkg", "a.go")); got != "package pkg // edited\n" {
+	// The vault now mirrors the workspace.
+	if got := readFile(t, filepath.Join(vault, "pkg", "a.go")); got != "package pkg // edited\n" {
 		t.Errorf("modified file not written back: %q", got)
 	}
-	if _, err := os.Stat(filepath.Join(repo, "new.go")); err != nil {
+	if _, err := os.Stat(filepath.Join(vault, "new.go")); err != nil {
 		t.Errorf("added file not written back: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, "doomed.txt")); !os.IsNotExist(err) {
-		t.Errorf("deleted file should be gone from repo, err=%v", err)
+	if _, err := os.Stat(filepath.Join(vault, "doomed.txt")); !os.IsNotExist(err) {
+		t.Errorf("deleted file should be gone from vault, err=%v", err)
 	}
 
 	// After re-baselining the manifest, a fresh diff is empty.

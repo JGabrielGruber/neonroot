@@ -10,13 +10,13 @@ import (
 
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
-	"github.com/JGabrielGruber/neonroot/internal/repo"
 	"github.com/JGabrielGruber/neonroot/internal/ui"
+	"github.com/JGabrielGruber/neonroot/internal/vault"
 )
 
 // testEnv builds a Loader over temp dirs standing in for the drive and tmpfs,
-// plus a repo containing one workspace.
-func testEnv(t *testing.T) (*Loader, domain.Repo) {
+// plus a vault containing one workspace.
+func testEnv(t *testing.T) (*Loader, domain.Vault) {
 	t.Helper()
 	base := t.TempDir()
 	paths := platform.Paths{
@@ -28,7 +28,7 @@ func testEnv(t *testing.T) (*Loader, domain.Repo) {
 		t.Fatal(err)
 	}
 
-	// A repo on a "drive" with a workspace holding one file.
+	// A vault on a "drive" with a workspace holding one file.
 	drive := t.TempDir()
 	wsRoot := filepath.Join(drive, "workspaces", "app")
 	if err := os.MkdirAll(wsRoot, 0o755); err != nil {
@@ -37,15 +37,15 @@ func testEnv(t *testing.T) (*Loader, domain.Repo) {
 	if err := os.WriteFile(filepath.Join(wsRoot, "main.go"), []byte("package main\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	idx := repo.NewIndex()
+	idx := vault.NewIndex()
 	idx.Workspaces = append(idx.Workspaces, domain.IndexWorkspace{Name: "app", Root: "workspaces/app"})
-	repo.Bump(idx)
-	if err := repo.WriteIndex(drive, idx); err != nil {
+	vault.Bump(idx)
+	if err := vault.WriteIndex(drive, idx); err != nil {
 		t.Fatal(err)
 	}
 
 	loader := &Loader{Paths: paths, UI: ui.New(&bytes.Buffer{}, ui.Options{})}
-	return loader, domain.Repo{Name: "ext", Path: drive}
+	return loader, domain.Vault{Name: "ext", Path: drive}
 }
 
 func TestLoad_HydratesAndRecordsState(t *testing.T) {
@@ -55,7 +55,7 @@ func TestLoad_HydratesAndRecordsState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ws.SourceRepo != "ext" || ws.SourceFingerprint.Revision != 1 {
+	if ws.SourceVault != "ext" || ws.SourceFingerprint.Revision != 1 {
 		t.Errorf("unexpected workspace record: %+v", ws)
 	}
 	// Payload hydrated.
@@ -97,9 +97,9 @@ func TestLoad_UnknownWorkspace(t *testing.T) {
 
 func TestLoad_UnavailableRepo(t *testing.T) {
 	loader, _ := testEnv(t)
-	_, err := loader.Load(domain.Repo{Name: "gone", Path: "/no/such/drive"}, "app")
-	if !errors.Is(err, domain.ErrRepoUnavailable) {
-		t.Fatalf("expected ErrRepoUnavailable, got %v", err)
+	_, err := loader.Load(domain.Vault{Name: "gone", Path: "/no/such/drive"}, "app")
+	if !errors.Is(err, domain.ErrVaultUnavailable) {
+		t.Fatalf("expected ErrVaultUnavailable, got %v", err)
 	}
 }
 
@@ -148,10 +148,10 @@ func TestLoad_StartsSessionAtWorkspaceRoot(t *testing.T) {
 	}
 }
 
-// setImage rewrites a repo's index to give a workspace an image binding.
-func setImage(t *testing.T, repoPath, ws, image string) {
+// setImage rewrites a vault's index to give a workspace an image binding.
+func setImage(t *testing.T, vaultPath, ws, image string) {
 	t.Helper()
-	idx, err := repo.ReadIndex(repoPath)
+	idx, err := vault.ReadIndex(vaultPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func setImage(t *testing.T, repoPath, ws, image string) {
 			idx.Workspaces[i].Image = image
 		}
 	}
-	if err := repo.WriteIndex(repoPath, idx); err != nil {
+	if err := vault.WriteIndex(vaultPath, idx); err != nil {
 		t.Fatal(err)
 	}
 }

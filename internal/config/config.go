@@ -1,5 +1,5 @@
 // Package config loads and saves NeonRoot's user configuration: the registry
-// of repos (name→path) and user preferences. Config is TOML, hand-editable, and
+// of vaults (name→path) and user preferences. Config is TOML, hand-editable, and
 // is the only NeonRoot data allowed to live on the SD card.
 package config
 
@@ -15,17 +15,17 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 )
 
-// ScratchRepoName is the built-in volatile repo that lives on tmpfs. It is a
+// ScratchVaultName is the built-in volatile vault that lives on tmpfs. It is a
 // staging area that disappears on reboot, so users always have a target even
 // with no external drive plugged in.
-const ScratchRepoName = "scratch"
+const ScratchVaultName = "scratch"
 
 // Config is the on-disk user configuration.
 type Config struct {
-	// DefaultRepo is the repo used when a command omits an explicit target.
-	DefaultRepo string `toml:"default_repo"`
-	// Repos is the registry of named cold-storage locations.
-	Repos []domain.Repo `toml:"repo"`
+	// DefaultVault is the vault used when a command omits an explicit target.
+	DefaultVault string `toml:"default_vault"`
+	// Vaults is the registry of named cold-storage locations.
+	Vaults []domain.Vault `toml:"vault"`
 }
 
 // Load reads config from path. A missing file is not an error: it yields an
@@ -66,34 +66,34 @@ func Save(c *Config, path string) error {
 	return os.Rename(tmp, path)
 }
 
-// Repo returns the repo registered under name.
-func (c *Config) Repo(name string) (domain.Repo, bool) {
-	for _, r := range c.Repos {
+// Vault returns the vault registered under name.
+func (c *Config) Vault(name string) (domain.Vault, bool) {
+	for _, r := range c.Vaults {
 		if r.Name == name {
 			return r, true
 		}
 	}
-	return domain.Repo{}, false
+	return domain.Vault{}, false
 }
 
-// AddRepo registers a repo, replacing any existing entry with the same name.
-func (c *Config) AddRepo(r domain.Repo) {
-	for i := range c.Repos {
-		if c.Repos[i].Name == r.Name {
-			c.Repos[i] = r
+// AddVault registers a vault, replacing any existing entry with the same name.
+func (c *Config) AddVault(r domain.Vault) {
+	for i := range c.Vaults {
+		if c.Vaults[i].Name == r.Name {
+			c.Vaults[i] = r
 			return
 		}
 	}
-	c.Repos = append(c.Repos, r)
+	c.Vaults = append(c.Vaults, r)
 }
 
-// EnsureScratch guarantees the built-in scratch repo exists, pointing at the
+// EnsureScratch guarantees the built-in scratch vault exists, pointing at the
 // given tmpfs path. It does not overwrite a user-provided "scratch" entry.
 func (c *Config) EnsureScratch(tmpfsPath string) {
-	if _, ok := c.Repo(ScratchRepoName); !ok {
-		c.Repos = append(c.Repos, domain.Repo{Name: ScratchRepoName, Path: tmpfsPath})
+	if _, ok := c.Vault(ScratchVaultName); !ok {
+		c.Vaults = append(c.Vaults, domain.Vault{Name: ScratchVaultName, Path: tmpfsPath})
 	}
-	if c.DefaultRepo == "" {
-		c.DefaultRepo = ScratchRepoName
+	if c.DefaultVault == "" {
+		c.DefaultVault = ScratchVaultName
 	}
 }

@@ -8,8 +8,8 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 )
 
-// Guards that domain.Index's TOML tags match the on-disk repo index format.
-// The repo package (Phase 1) reads this format with version checks; this keeps
+// Guards that domain.Index's TOML tags match the on-disk vault index format.
+// The vault package (Phase 1) reads this format with version checks; this keeps
 // the type and the format from drifting apart.
 func TestIndexSchemaDecodes(t *testing.T) {
 	const idxTOML = `

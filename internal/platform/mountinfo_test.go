@@ -36,7 +36,7 @@ func TestMountpointFor(t *testing.T) {
 		wantMount string
 		wantFS    string
 	}{
-		{"/mnt/ext/repo/workspace", "/mnt/ext", "vfat"},
+		{"/mnt/ext/vault/workspace", "/mnt/ext", "vfat"},
 		{"/mnt/ext", "/mnt/ext", "vfat"},
 		{"/home/pi/.config/neonroot", "/", "ext4"}, // on the card's root fs
 		{"/tmp/neonroot-1000/workspaces", "/tmp", "tmpfs"},

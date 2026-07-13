@@ -138,9 +138,11 @@ available.
   refuses when a concurrent writer pushed. **Gotcha pinned:** `init --bare` leaves
   `HEAD`→`master`; `create` must `git symbolic-ref HEAD refs/heads/main` so clones
   default correctly.
-- **Phase B — Vault rename.** `repo`→`vault` everywhere (`internal/repo`→
-  `internal/vault`, `domain.Repo`→`Vault`, config `[[vault]]`/`default_vault`, `vault`
-  command tree, `--vault` flag). `index.toml` format unchanged. Mechanical; lands first.
+- **Phase B — Vault rename.** ✅ **Done.** `repo`→`vault` everywhere (`internal/repo`→
+  `internal/vault`, `domain.Repo`→`Vault`, `VaultState`, `ErrVault*`, config
+  `[[vault]]`/`default_vault`, `vault add/list/set-default` command tree, `--vault`
+  flag, `Workspace.SourceVault`). `index.toml` on-disk format unchanged. Full suite
+  green; CLI smoke-tested.
 - **Phase C — Hot-storage usage in `list`/`status`.** Which workspaces are hot, live
   dirty/ahead state, tmpfs footprint.
 - **Phase D — Git workspace lifecycle.** New `internal/git` adapter (via

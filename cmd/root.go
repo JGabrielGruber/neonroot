@@ -11,9 +11,9 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/config"
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
-	"github.com/JGabrielGruber/neonroot/internal/repo"
 	"github.com/JGabrielGruber/neonroot/internal/runtime"
 	"github.com/JGabrielGruber/neonroot/internal/ui"
+	"github.com/JGabrielGruber/neonroot/internal/vault"
 )
 
 // version is stamped into the binary and surfaced via --version.
@@ -72,10 +72,10 @@ func buildApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The built-in scratch repo lives on tmpfs so there is always a target.
+	// The built-in scratch vault lives on tmpfs so there is always a target.
 	scratchPath := filepath.Join(paths.Cache, "scratch")
 	cfg.EnsureScratch(scratchPath)
-	if err := ensureScratchRepo(scratchPath); err != nil {
+	if err := ensureScratchVault(scratchPath); err != nil {
 		return nil, err
 	}
 
@@ -84,41 +84,41 @@ func buildApp() (*App, error) {
 	return &App{Paths: paths, Config: cfg, UI: reporter, Runner: platform.ExecRunner{}}, nil
 }
 
-// ensureScratchRepo materializes the tmpfs scratch repo: its directory and an
+// ensureScratchVault materializes the tmpfs scratch vault: its directory and an
 // initial index, so it is immediately available and usable as a target.
-func ensureScratchRepo(path string) error {
+func ensureScratchVault(path string) error {
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		return err
 	}
-	if _, err := os.Stat(repo.IndexPath(path)); errors.Is(err, os.ErrNotExist) {
-		return repo.WriteIndex(path, repo.NewIndex())
+	if _, err := os.Stat(vault.IndexPath(path)); errors.Is(err, os.ErrNotExist) {
+		return vault.WriteIndex(path, vault.NewIndex())
 	}
 	return nil
 }
 
-// resolveRepo returns the repo registered under name, or the default repo when
+// resolveVault returns the vault registered under name, or the default vault when
 // name is empty.
-func (a *App) resolveRepo(name string) (domain.Repo, error) {
+func (a *App) resolveVault(name string) (domain.Vault, error) {
 	if name == "" {
-		name = a.Config.DefaultRepo
+		name = a.Config.DefaultVault
 	}
-	r, ok := a.Config.Repo(name)
+	r, ok := a.Config.Vault(name)
 	if !ok {
-		return domain.Repo{}, fmt.Errorf("%w: %q", domain.ErrRepoNotFound, name)
+		return domain.Vault{}, fmt.Errorf("%w: %q", domain.ErrVaultNotFound, name)
 	}
 	return r, nil
 }
 
-// requireAvailable returns ErrRepoUnavailable (with a plug-in hint) unless the
-// repo's backing drive is currently mounted.
-func (a *App) requireAvailable(r domain.Repo) error {
-	state, err := repo.StateLive(r.Path)
+// requireAvailable returns ErrVaultUnavailable (with a plug-in hint) unless the
+// vault's backing drive is currently mounted.
+func (a *App) requireAvailable(r domain.Vault) error {
+	state, err := vault.StateLive(r.Path)
 	if err != nil {
 		return err
 	}
-	if state != domain.RepoStateAvailable {
+	if state != domain.VaultStateAvailable {
 		return fmt.Errorf("%w: %q at %s — plug in the drive and retry",
-			domain.ErrRepoUnavailable, r.Name, r.Path)
+			domain.ErrVaultUnavailable, r.Name, r.Path)
 	}
 	return nil
 }
@@ -137,8 +137,8 @@ func (a *App) podman() (*runtime.Podman, error) {
 }
 
 // lock takes a non-blocking advisory lock under the runtime tmpfs (never the
-// card), scoped by key. Callers namespace keys (e.g. "repo-ext", "ws-webapp")
-// so repo and workspace locks never collide.
+// card), scoped by key. Callers namespace keys (e.g. "vault-ext", "ws-webapp")
+// so vault and workspace locks never collide.
 func (a *App) lock(key string) (*platform.FileLock, error) {
 	dir := filepath.Join(a.Paths.Runtime, "locks")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -160,7 +160,7 @@ func Execute() {
 // branch on them; everything else is a generic failure.
 func exitCode(err error) int {
 	switch {
-	case errors.Is(err, domain.ErrRepoUnavailable):
+	case errors.Is(err, domain.ErrVaultUnavailable):
 		return 3
 	case errors.Is(err, domain.ErrLocked):
 		return 4

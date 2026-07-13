@@ -9,20 +9,20 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/config"
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
-	"github.com/JGabrielGruber/neonroot/internal/repo"
+	"github.com/JGabrielGruber/neonroot/internal/vault"
 )
 
-var repoCmd = &cobra.Command{
-	Use:   "repo",
-	Short: "Manage the repo registry (one-time setup)",
+var vaultCmd = &cobra.Command{
+	Use:   "vault",
+	Short: "Manage the vault registry (one-time setup)",
 }
 
-var repoAddCmd = &cobra.Command{
+var vaultAddCmd = &cobra.Command{
 	Use:   "add <name> <path>",
-	Short: "Register a repo path in config",
+	Short: "Register a vault path in config",
 	Long: `Registers a named cold-storage location (typically a directory on an
-external drive). If no real default repo is set yet, the new repo becomes the
-default so workspace commands need no --repo. This writes config, the only file
+external drive). If no real default vault is set yet, the new vault becomes the
+default so workspace commands need no --vault. This writes config, the only file
 NeonRoot stores on the SD card.`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -30,20 +30,20 @@ NeonRoot stores on the SD card.`,
 		if !filepath.IsAbs(path) {
 			return fmt.Errorf("path must be absolute: %s", path)
 		}
-		app.Config.AddRepo(domain.Repo{Name: name, Path: filepath.Clean(path)})
+		app.Config.AddVault(domain.Vault{Name: name, Path: filepath.Clean(path)})
 
-		// Configure-once: the first real repo becomes the default, replacing the
+		// Configure-once: the first real vault becomes the default, replacing the
 		// volatile scratch placeholder.
 		madeDefault := false
-		if app.Config.DefaultRepo == "" || app.Config.DefaultRepo == config.ScratchRepoName {
-			app.Config.DefaultRepo = name
+		if app.Config.DefaultVault == "" || app.Config.DefaultVault == config.ScratchVaultName {
+			app.Config.DefaultVault = name
 			madeDefault = true
 		}
 		if err := saveConfig(); err != nil {
 			return err
 		}
 
-		msg := fmt.Sprintf("registered repo %q → %s", name, path)
+		msg := fmt.Sprintf("registered vault %q → %s", name, path)
 		if madeDefault {
 			msg += " (now the default)"
 		}
@@ -52,13 +52,13 @@ NeonRoot stores on the SD card.`,
 	},
 }
 
-var repoListCmd = &cobra.Command{
+var vaultListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List configured repos and their availability",
+	Short: "List configured vaults and their availability",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		if len(app.Config.Repos) == 0 {
-			app.UI.Info("no repos configured")
+		if len(app.Config.Vaults) == 0 {
+			app.UI.Info("no vaults configured")
 			return nil
 		}
 		mounts, err := platform.Mounts()
@@ -66,31 +66,31 @@ var repoListCmd = &cobra.Command{
 			return err
 		}
 		out := cmd.OutOrStdout()
-		for _, r := range app.Config.Repos {
+		for _, r := range app.Config.Vaults {
 			marker := " "
-			if r.Name == app.Config.DefaultRepo {
+			if r.Name == app.Config.DefaultVault {
 				marker = "*"
 			}
-			fmt.Fprintf(out, "%s %-12s %-11s %s\n", marker, r.Name, repo.State(r.Path, mounts), r.Path)
+			fmt.Fprintf(out, "%s %-12s %-11s %s\n", marker, r.Name, vault.State(r.Path, mounts), r.Path)
 		}
 		return nil
 	},
 }
 
-var repoSetDefaultCmd = &cobra.Command{
+var vaultSetDefaultCmd = &cobra.Command{
 	Use:   "set-default <name>",
-	Short: "Set the default repo for workspace commands",
+	Short: "Set the default vault for workspace commands",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
-		if _, ok := app.Config.Repo(name); !ok {
-			return fmt.Errorf("%w: %q", domain.ErrRepoNotFound, name)
+		if _, ok := app.Config.Vault(name); !ok {
+			return fmt.Errorf("%w: %q", domain.ErrVaultNotFound, name)
 		}
-		app.Config.DefaultRepo = name
+		app.Config.DefaultVault = name
 		if err := saveConfig(); err != nil {
 			return err
 		}
-		app.UI.Success(fmt.Sprintf("default repo is now %q", name))
+		app.UI.Success(fmt.Sprintf("default vault is now %q", name))
 		return nil
 	},
 }
@@ -101,6 +101,6 @@ func saveConfig() error {
 }
 
 func init() {
-	repoCmd.AddCommand(repoAddCmd, repoListCmd, repoSetDefaultCmd)
-	rootCmd.AddCommand(repoCmd)
+	vaultCmd.AddCommand(vaultAddCmd, vaultListCmd, vaultSetDefaultCmd)
+	rootCmd.AddCommand(vaultCmd)
 }

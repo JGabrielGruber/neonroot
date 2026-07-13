@@ -11,13 +11,13 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/hydration"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
-	"github.com/JGabrielGruber/neonroot/internal/repo"
+	"github.com/JGabrielGruber/neonroot/internal/vault"
 	"github.com/JGabrielGruber/neonroot/internal/workspace"
 )
 
 var statusCmd = &cobra.Command{
 	Use:   "status [workspace]",
-	Short: "Show repo availability, or a loaded workspace's pending changes",
+	Short: "Show vault availability, or a loaded workspace's pending changes",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {
@@ -42,7 +42,7 @@ func workspaceStatus(cmd *cobra.Command, name string) error {
 		return err
 	}
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "%s (from %s) at %s\n", ws.Name, ws.SourceRepo, ws.Root)
+	fmt.Fprintf(out, "%s (from %s) at %s\n", ws.Name, ws.SourceVault, ws.Root)
 	if len(changes) == 0 {
 		fmt.Fprintln(out, "  clean — no changes since load")
 		return nil
@@ -53,7 +53,7 @@ func workspaceStatus(cmd *cobra.Command, name string) error {
 	return nil
 }
 
-// overviewStatus shows every repo's availability and contents plus loaded
+// overviewStatus shows every vault's availability and contents plus loaded
 // workspaces.
 func overviewStatus(cmd *cobra.Command) error {
 	mounts, err := platform.Mounts()
@@ -61,14 +61,14 @@ func overviewStatus(cmd *cobra.Command) error {
 		return err
 	}
 	out := cmd.OutOrStdout()
-	for _, r := range app.Config.Repos {
-		state := repo.State(r.Path, mounts)
+	for _, r := range app.Config.Vaults {
+		state := vault.State(r.Path, mounts)
 		fmt.Fprintf(out, "%-12s %-11s %s\n", r.Name, state, r.Path)
 
-		if state != domain.RepoStateAvailable {
+		if state != domain.VaultStateAvailable {
 			continue
 		}
-		idx, err := repo.ReadIndex(r.Path)
+		idx, err := vault.ReadIndex(r.Path)
 		if errors.Is(err, fs.ErrNotExist) {
 			fmt.Fprintf(out, "    (uninitialized)\n")
 			continue
@@ -90,7 +90,7 @@ func overviewStatus(cmd *cobra.Command) error {
 	if len(loaded) > 0 {
 		fmt.Fprintf(out, "\nloaded workspaces (in tmpfs):\n")
 		for _, w := range loaded {
-			fmt.Fprintf(out, "  %-12s from %-10s %s\n", w.Name, w.SourceRepo, w.Root)
+			fmt.Fprintf(out, "  %-12s from %-10s %s\n", w.Name, w.SourceVault, w.Root)
 		}
 		fmt.Fprintf(out, "\nrun 'neonroot status <workspace>' to see pending changes\n")
 	}

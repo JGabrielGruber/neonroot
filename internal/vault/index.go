@@ -1,8 +1,8 @@
-// Package repo resolves repos from cold storage: reading and writing the
-// index.toml at a repo's root, reporting whether the backing drive is currently
+// Package vault resolves vaults from cold storage: reading and writing the
+// index.toml at a vault's root, reporting whether the backing drive is currently
 // available, and capturing the fingerprint used later to detect whether the
 // drive changed underneath a loaded workspace.
-package repo
+package vault
 
 import (
 	"fmt"
@@ -15,12 +15,12 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 )
 
-// indexFile is the name of the index at a repo's root.
+// indexFile is the name of the index at a vault's root.
 const indexFile = "index.toml"
 
-// IndexPath returns the location of a repo's index.
-func IndexPath(repoPath string) string {
-	return filepath.Join(repoPath, indexFile)
+// IndexPath returns the location of a vault's index.
+func IndexPath(vaultPath string) string {
+	return filepath.Join(vaultPath, indexFile)
 }
 
 // NewIndex returns an empty index stamped with the current schema version.
@@ -28,13 +28,13 @@ func NewIndex() *domain.Index {
 	return &domain.Index{SchemaVersion: domain.SchemaVersion}
 }
 
-// ReadIndex reads and validates a repo's index. A missing index surfaces as
+// ReadIndex reads and validates a vault's index. A missing index surfaces as
 // fs.ErrNotExist (callers decide whether to initialize). An index declaring a
 // newer schema than this build understands is rejected with
 // ErrIndexVersionUnsupported rather than being mis-parsed.
-func ReadIndex(repoPath string) (*domain.Index, error) {
+func ReadIndex(vaultPath string) (*domain.Index, error) {
 	var idx domain.Index
-	if _, err := toml.DecodeFile(IndexPath(repoPath), &idx); err != nil {
+	if _, err := toml.DecodeFile(IndexPath(vaultPath), &idx); err != nil {
 		return nil, err
 	}
 	if idx.SchemaVersion > domain.SchemaVersion {
@@ -44,11 +44,11 @@ func ReadIndex(repoPath string) (*domain.Index, error) {
 	return &idx, nil
 }
 
-// WriteIndex writes idx to the repo atomically (temp file + rename) so a crash
+// WriteIndex writes idx to the vault atomically (temp file + rename) so a crash
 // or an abruptly unplugged drive never leaves a truncated index.
-func WriteIndex(repoPath string, idx *domain.Index) error {
-	path := IndexPath(repoPath)
-	f, err := os.CreateTemp(repoPath, ".index-*.tmp")
+func WriteIndex(vaultPath string, idx *domain.Index) error {
+	path := IndexPath(vaultPath)
+	f, err := os.CreateTemp(vaultPath, ".index-*.tmp")
 	if err != nil {
 		return err
 	}
@@ -72,13 +72,13 @@ func WriteIndex(repoPath string, idx *domain.Index) error {
 
 // Bump advances the index to a new revision and timestamps it. Called on every
 // mutation (create, commit) so Fingerprint comparisons detect out-of-band
-// changes to the repo.
+// changes to the vault.
 func Bump(idx *domain.Index) {
 	idx.Revision++
 	idx.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 }
 
-// Fingerprint captures a repo's identity at a point in time for cheap
+// Fingerprint captures a vault's identity at a point in time for cheap
 // conflict detection.
 func Fingerprint(idx *domain.Index) domain.Fingerprint {
 	return domain.Fingerprint{Revision: idx.Revision, UpdatedAt: idx.UpdatedAt}

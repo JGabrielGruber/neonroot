@@ -1,6 +1,6 @@
 // Package commit computes what changed in a hydrated workspace since it was
 // loaded and writes those changes back to cold storage. It diffs the live tmpfs
-// tree against the load-time manifest, detects whether the target repo changed
+// tree against the load-time manifest, detects whether the target vault changed
 // underneath the workspace, and applies only the delta — it never merges.
 package commit
 
@@ -92,8 +92,8 @@ func Diff(root string, man *domain.Manifest) ([]domain.Change, error) {
 	return changes, nil
 }
 
-// HasConflict reports whether the target repo changed since the workspace was
-// loaded, by comparing the repo's current fingerprint against the one captured
+// HasConflict reports whether the target vault changed since the workspace was
+// loaded, by comparing the vault's current fingerprint against the one captured
 // at load time. A conflict means committing in place would overwrite newer
 // data, so the caller must refuse unless forced or redirected to a new name.
 func HasConflict(current, atLoad domain.Fingerprint) bool {

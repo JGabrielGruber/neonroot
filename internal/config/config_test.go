@@ -12,8 +12,8 @@ func TestLoad_MissingFileIsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("missing config should not error: %v", err)
 	}
-	if len(c.Repos) != 0 {
-		t.Errorf("expected empty config, got %d repos", len(c.Repos))
+	if len(c.Vaults) != 0 {
+		t.Errorf("expected empty config, got %d vaults", len(c.Vaults))
 	}
 }
 
@@ -21,8 +21,8 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "config.toml")
 
 	orig := &Config{
-		DefaultRepo: "ext",
-		Repos: []domain.Repo{
+		DefaultVault: "ext",
+		Vaults: []domain.Vault{
 			{Name: "ext", Path: "/mnt/ext/neonroot"},
 			{Name: "backup", Path: "/mnt/backup/nr"},
 		},
@@ -35,23 +35,23 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if got.DefaultRepo != "ext" || len(got.Repos) != 2 {
+	if got.DefaultVault != "ext" || len(got.Vaults) != 2 {
 		t.Fatalf("round-trip mismatch: %+v", got)
 	}
-	r, ok := got.Repo("backup")
+	r, ok := got.Vault("backup")
 	if !ok || r.Path != "/mnt/backup/nr" {
-		t.Errorf("repo lookup failed: %+v ok=%v", r, ok)
+		t.Errorf("vault lookup failed: %+v ok=%v", r, ok)
 	}
 }
 
-func TestAddRepo_ReplacesByName(t *testing.T) {
+func TestAddVault_ReplacesByName(t *testing.T) {
 	c := &Config{}
-	c.AddRepo(domain.Repo{Name: "ext", Path: "/old"})
-	c.AddRepo(domain.Repo{Name: "ext", Path: "/new"})
-	if len(c.Repos) != 1 {
-		t.Fatalf("expected replace, got %d repos", len(c.Repos))
+	c.AddVault(domain.Vault{Name: "ext", Path: "/old"})
+	c.AddVault(domain.Vault{Name: "ext", Path: "/new"})
+	if len(c.Vaults) != 1 {
+		t.Fatalf("expected replace, got %d vaults", len(c.Vaults))
 	}
-	if r, _ := c.Repo("ext"); r.Path != "/new" {
+	if r, _ := c.Vault("ext"); r.Path != "/new" {
 		t.Errorf("expected /new, got %s", r.Path)
 	}
 }
@@ -60,17 +60,17 @@ func TestEnsureScratch(t *testing.T) {
 	c := &Config{}
 	c.EnsureScratch("/tmp/neonroot-1000/scratch")
 
-	r, ok := c.Repo(ScratchRepoName)
+	r, ok := c.Vault(ScratchVaultName)
 	if !ok || r.Path != "/tmp/neonroot-1000/scratch" {
 		t.Fatalf("scratch not added: %+v ok=%v", r, ok)
 	}
-	if c.DefaultRepo != ScratchRepoName {
-		t.Errorf("default should fall back to scratch, got %q", c.DefaultRepo)
+	if c.DefaultVault != ScratchVaultName {
+		t.Errorf("default should fall back to scratch, got %q", c.DefaultVault)
 	}
 
 	// Idempotent and non-clobbering.
 	c.EnsureScratch("/different")
-	if r, _ := c.Repo(ScratchRepoName); r.Path != "/tmp/neonroot-1000/scratch" {
+	if r, _ := c.Vault(ScratchVaultName); r.Path != "/tmp/neonroot-1000/scratch" {
 		t.Errorf("EnsureScratch clobbered existing entry: %s", r.Path)
 	}
 }

@@ -76,9 +76,9 @@ func Mounts() ([]Mount, error) {
 // the filesystem that actually backs path. Ok is false if none matched (should
 // not happen for an absolute path on a running system, where "/" always does).
 //
-// This is the primitive behind repo-availability: a stale mountpoint directory
+// This is the primitive behind vault-availability: a stale mountpoint directory
 // left behind after unmount resolves to a *different* (parent) mount than when
-// the drive is present, which the repo layer detects via a stable marker file.
+// the drive is present, which the vault layer detects via a stable marker file.
 func MountpointFor(mounts []Mount, path string) (Mount, bool) {
 	path = filepath.Clean(path)
 	var best Mount

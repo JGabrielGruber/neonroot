@@ -11,18 +11,18 @@ import (
 )
 
 var (
-	commitRepoFlag  string
+	commitVaultFlag string
 	commitAsFlag    string
 	commitForceFlag bool
 )
 
 var commitCmd = &cobra.Command{
 	Use:   "commit <workspace>",
-	Short: "Write workspace changes back to a repo",
+	Short: "Write workspace changes back to a vault",
 	Long: `Writes a loaded workspace's changes back to cold storage. By default it
-commits in place (only the changed files) to the repo it was loaded from, after
-checking the repo has not changed underneath you. Use --as to save a copy under
-a new name, --repo to target a different repo, and --force to override.`,
+commits in place (only the changed files) to the vault it was loaded from, after
+checking the vault has not changed underneath you. Use --as to save a copy under
+a new name, --vault to target a different vault, and --force to override.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
@@ -32,11 +32,11 @@ a new name, --repo to target a different repo, and --force to override.`,
 			return err
 		}
 
-		targetName := commitRepoFlag
+		targetName := commitVaultFlag
 		if targetName == "" {
-			targetName = ws.SourceRepo
+			targetName = ws.SourceVault
 		}
-		target, err := app.resolveRepo(targetName)
+		target, err := app.resolveVault(targetName)
 		if err != nil {
 			return err
 		}
@@ -44,7 +44,7 @@ a new name, --repo to target a different repo, and --force to override.`,
 			return err
 		}
 
-		lock, err := app.lock("repo-" + target.Name)
+		lock, err := app.lock("vault-" + target.Name)
 		if err != nil {
 			return err
 		}
@@ -63,12 +63,12 @@ a new name, --repo to target a different repo, and --force to override.`,
 
 func reportCommit(res *commit.Result) {
 	if res.SavedAs {
-		app.UI.Success(fmt.Sprintf("saved to repo %q as %q: %d file(s), revision %d",
+		app.UI.Success(fmt.Sprintf("saved to vault %q as %q: %d file(s), revision %d",
 			res.TargetRepo, res.TargetName, res.FileCount, res.Revision))
 		return
 	}
 	if len(res.Changes) == 0 {
-		app.UI.Info("nothing to commit — workspace matches the repo")
+		app.UI.Info("nothing to commit — workspace matches the vault")
 		return
 	}
 	var added, modified, deleted int
@@ -88,7 +88,7 @@ func reportCommit(res *commit.Result) {
 }
 
 func init() {
-	commitCmd.Flags().StringVarP(&commitRepoFlag, "repo", "r", "", "target repo (default: the repo it was loaded from)")
+	commitCmd.Flags().StringVarP(&commitVaultFlag, "vault", "", "", "target vault (default: the vault it was loaded from)")
 	commitCmd.Flags().StringVar(&commitAsFlag, "as", "", "save under a new workspace name instead of committing in place")
 	commitCmd.Flags().BoolVar(&commitForceFlag, "force", false, "override a conflict or overwrite an existing target")
 	rootCmd.AddCommand(commitCmd)

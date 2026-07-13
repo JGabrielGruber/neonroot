@@ -9,18 +9,18 @@ import (
 
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
-	"github.com/JGabrielGruber/neonroot/internal/repo"
+	"github.com/JGabrielGruber/neonroot/internal/vault"
 	"github.com/JGabrielGruber/neonroot/internal/workspace"
 )
 
-var listRepoFlag string
+var listVaultFlag string
 
 // listCmd is workspace-first: the bare `neonroot list` shows your workspaces.
-// Repos are background config, listed via `neonroot repo list`.
+// Vaults are background config, listed via `neonroot vault list`.
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List your workspaces",
-	Long:  "Lists workspaces across available repos, with their repo, image, and loaded state.",
+	Long:  "Lists workspaces across available vaults, with their vault, image, and loaded state.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		mounts, err := platform.Mounts()
@@ -28,17 +28,17 @@ var listCmd = &cobra.Command{
 			return err
 		}
 		out := cmd.OutOrStdout()
-		fmt.Fprintf(out, "%-14s %-10s %-9s %s\n", "WORKSPACE", "REPO", "STATE", "IMAGE")
+		fmt.Fprintf(out, "%-14s %-10s %-9s %s\n", "WORKSPACE", "VAULT", "STATE", "IMAGE")
 
 		var rows int
-		for _, r := range app.Config.Repos {
-			if listRepoFlag != "" && r.Name != listRepoFlag {
+		for _, r := range app.Config.Vaults {
+			if listVaultFlag != "" && r.Name != listVaultFlag {
 				continue
 			}
-			if repo.State(r.Path, mounts) != domain.RepoStateAvailable {
+			if vault.State(r.Path, mounts) != domain.VaultStateAvailable {
 				continue
 			}
-			idx, err := repo.ReadIndex(r.Path)
+			idx, err := vault.ReadIndex(r.Path)
 			if errors.Is(err, fs.ErrNotExist) {
 				continue
 			}
@@ -67,6 +67,6 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
-	listCmd.Flags().StringVarP(&listRepoFlag, "repo", "r", "", "limit to one repo")
+	listCmd.Flags().StringVarP(&listVaultFlag, "vault", "", "", "limit to one vault")
 	rootCmd.AddCommand(listCmd)
 }

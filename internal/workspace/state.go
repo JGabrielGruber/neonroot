@@ -1,4 +1,4 @@
-// Package workspace orchestrates the load use case — resolving a repo, checking
+// Package workspace orchestrates the load use case — resolving a vault, checking
 // availability, hydrating into tmpfs, and recording the manifest plus the state
 // needed to commit changes back later. It also tracks which workspaces are
 // currently loaded.

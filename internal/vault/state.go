@@ -1,4 +1,4 @@
-package repo
+package vault
 
 import (
 	"os"
@@ -7,40 +7,40 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 )
 
-// State reports whether a repo's backing storage is reachable right now, given
+// State reports whether a vault's backing storage is reachable right now, given
 // a snapshot of the mount table.
 //
 // The tricky case is a stale mountpoint: a directory like /mnt/ext still exists
 // after the drive is unplugged, so os.Stat alone would wrongly report it
 // present. We resolve it two ways:
 //
-//   - A readable index.toml is definitive proof the repo (and its drive) is
+//   - A readable index.toml is definitive proof the vault (and its drive) is
 //     mounted and initialized.
 //   - Otherwise the path must sit on a *distinct* mount (a drive or tmpfs, not
 //     the SD card's root filesystem). An unmounted mountpoint dir resolves onto
 //     "/" and is correctly reported unavailable; a genuinely mounted-but-empty
 //     drive resolves onto its own mount and is available for initialization.
-func State(repoPath string, mounts []platform.Mount) domain.RepoState {
-	info, err := os.Stat(repoPath)
+func State(vaultPath string, mounts []platform.Mount) domain.VaultState {
+	info, err := os.Stat(vaultPath)
 	if err != nil || !info.IsDir() {
-		return domain.RepoStateUnavailable
+		return domain.VaultStateUnavailable
 	}
-	if fileExists(IndexPath(repoPath)) {
-		return domain.RepoStateAvailable
+	if fileExists(IndexPath(vaultPath)) {
+		return domain.VaultStateAvailable
 	}
-	if m, ok := platform.MountpointFor(mounts, repoPath); ok && m.MountPoint != "/" {
-		return domain.RepoStateAvailable
+	if m, ok := platform.MountpointFor(mounts, vaultPath); ok && m.MountPoint != "/" {
+		return domain.VaultStateAvailable
 	}
-	return domain.RepoStateUnavailable
+	return domain.VaultStateUnavailable
 }
 
 // StateLive resolves availability against the current mount table.
-func StateLive(repoPath string) (domain.RepoState, error) {
+func StateLive(vaultPath string) (domain.VaultState, error) {
 	mounts, err := platform.Mounts()
 	if err != nil {
-		return domain.RepoStateUnknown, err
+		return domain.VaultStateUnknown, err
 	}
-	return State(repoPath, mounts), nil
+	return State(vaultPath, mounts), nil
 }
 
 func fileExists(path string) bool {

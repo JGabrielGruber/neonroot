@@ -1,4 +1,4 @@
-package repo
+package vault
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestState(t *testing.T) {
-	// A repo dir with an index is unambiguously available.
+	// A vault dir with an index is unambiguously available.
 	withIndex := t.TempDir()
 	if err := WriteIndex(withIndex, NewIndex()); err != nil {
 		t.Fatal(err)
@@ -28,12 +28,12 @@ func TestState(t *testing.T) {
 	cases := []struct {
 		name string
 		path string
-		want domain.RepoState
+		want domain.VaultState
 	}{
-		{"initialized repo", withIndex, domain.RepoStateAvailable},
-		{"mounted uninitialized drive", mountedEmpty, domain.RepoStateAvailable},
-		{"stale unmounted mountpoint", staleEmpty, domain.RepoStateUnavailable},
-		{"nonexistent path", "/nope/does/not/exist", domain.RepoStateUnavailable},
+		{"initialized vault", withIndex, domain.VaultStateAvailable},
+		{"mounted uninitialized drive", mountedEmpty, domain.VaultStateAvailable},
+		{"stale unmounted mountpoint", staleEmpty, domain.VaultStateUnavailable},
+		{"nonexistent path", "/nope/does/not/exist", domain.VaultStateUnavailable},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

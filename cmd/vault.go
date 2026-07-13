@@ -95,12 +95,44 @@ var vaultSetDefaultCmd = &cobra.Command{
 	},
 }
 
+var vaultRmCmd = &cobra.Command{
+	Use:   "rm <name>",
+	Short: "Unregister a vault (does not delete data on the drive)",
+	Long: `Removes a vault from config. The drive's contents are left untouched —
+this only forgets the registration.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+		if name == config.ScratchVaultName {
+			return fmt.Errorf("cannot remove the built-in scratch vault")
+		}
+		if _, ok := app.Config.Vault(name); !ok {
+			return fmt.Errorf("%w: %q", domain.ErrVaultNotFound, name)
+		}
+		kept := app.Config.Vaults[:0:0]
+		for _, v := range app.Config.Vaults {
+			if v.Name != name {
+				kept = append(kept, v)
+			}
+		}
+		app.Config.Vaults = kept
+		if app.Config.DefaultVault == name {
+			app.Config.DefaultVault = config.ScratchVaultName
+		}
+		if err := saveConfig(); err != nil {
+			return err
+		}
+		app.UI.Success(fmt.Sprintf("unregistered vault %q (drive data untouched)", name))
+		return nil
+	},
+}
+
 // saveConfig persists the config to the card.
 func saveConfig() error {
 	return config.Save(app.Config, filepath.Join(app.Paths.Config, "config.toml"))
 }
 
 func init() {
-	vaultCmd.AddCommand(vaultAddCmd, vaultListCmd, vaultSetDefaultCmd)
+	vaultCmd.AddCommand(vaultAddCmd, vaultListCmd, vaultSetDefaultCmd, vaultRmCmd)
 	rootCmd.AddCommand(vaultCmd)
 }

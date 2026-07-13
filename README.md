@@ -26,6 +26,10 @@ Workspace commands (the everyday surface):
 | `status [name]` | Vault overview, or a workspace's live git state (dirty/ahead/behind) |
 | `snapshot <name> <label>` | Tag a durable point-in-time copy of the workspace |
 | `stop <name>`   | Stop the container/pod + session and drop the tmpfs copy |
+| `rm <name>`     | Delete a workspace from its vault (stop it first) |
+
+Attaching recreates the session if you exited it (Ctrl-D) — the container keeps
+running until `stop`, so you can always `attach` back in.
 
 Image management (`neonroot image …`):
 
@@ -46,6 +50,7 @@ Vault setup (one-time):
 | `vault add <name> <path>` | Register a vault; the first becomes the default |
 | `vault list`              | List vaults and availability |
 | `vault set-default <name>`| Change the default vault |
+| `vault rm <name>`         | Unregister a vault (drive data untouched) |
 
 Workspace commands default to the configured default vault (no `--vault` needed);
 pass `--vault` to target another. Global: `--quiet`/`-q`, `--plain`.

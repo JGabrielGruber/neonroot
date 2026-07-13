@@ -7,9 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/JGabrielGruber/neonroot/internal/commit"
 	"github.com/JGabrielGruber/neonroot/internal/domain"
-	"github.com/JGabrielGruber/neonroot/internal/hydration"
+	"github.com/JGabrielGruber/neonroot/internal/git"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 	"github.com/JGabrielGruber/neonroot/internal/vault"
 	"github.com/JGabrielGruber/neonroot/internal/workspace"
@@ -27,28 +26,35 @@ var statusCmd = &cobra.Command{
 	},
 }
 
-// workspaceStatus shows the pending diff for one loaded workspace.
+// workspaceStatus shows one loaded workspace's live git state: uncommitted
+// changes and how far ahead/behind its vault it is.
 func workspaceStatus(cmd *cobra.Command, name string) error {
 	ws, err := workspace.ReadState(app.Paths, name)
 	if err != nil {
 		return err
 	}
-	man, err := hydration.ReadManifest(app.Paths.ManifestPath(name))
-	if err != nil {
-		return err
+	g := &git.Git{Runner: app.Runner}
+	if !g.Available() {
+		return fmt.Errorf("git is required but was not found on PATH")
 	}
-	changes, err := commit.Diff(ws.Root, man)
+	st, err := g.Status(cmd.Context(), ws.Root)
 	if err != nil {
 		return err
 	}
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "%s (from %s) at %s\n", ws.Name, ws.SourceVault, ws.Root)
-	if len(changes) == 0 {
-		fmt.Fprintln(out, "  clean — no changes since load")
-		return nil
+	switch {
+	case st.Dirty && st.Ahead > 0:
+		fmt.Fprintf(out, "  uncommitted changes, and %d commit(s) not yet pushed\n", st.Ahead)
+	case st.Dirty:
+		fmt.Fprintln(out, "  uncommitted changes")
+	case st.Ahead > 0:
+		fmt.Fprintf(out, "  %d commit(s) not yet pushed — run 'neonroot commit %s'\n", st.Ahead, name)
+	default:
+		fmt.Fprintln(out, "  clean — nothing to commit")
 	}
-	for _, c := range changes {
-		fmt.Fprintf(out, "  %-8s %s\n", c.Kind, c.Path)
+	if st.Behind > 0 {
+		fmt.Fprintf(out, "  vault is %d commit(s) ahead — reload to catch up\n", st.Behind)
 	}
 	return nil
 }

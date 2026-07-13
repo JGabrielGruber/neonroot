@@ -8,9 +8,9 @@ NeonRoot hydrates development workspaces from cold storage (an external drive)
 into tmpfs so you can unplug and work untethered, then commit changes back to the
 drive when you choose. It never writes to the SD card it boots from.
 
-NeonRoot is **workspace-first**: you name a workspace, and it uses a repo (where
-it's stored) and optionally an image (what it runs in). You configure a repo once
-and then work by workspace name.
+NeonRoot is **workspace-first**: you name a workspace, and it uses a **vault**
+(where it's stored — a git repo per workspace) and optionally an image (what it
+runs in). You configure a vault once and then work by workspace name.
 
 ## Commands
 
@@ -18,27 +18,29 @@ Workspace commands (the everyday surface):
 
 | Command   | Purpose |
 |-----------|---------|
-| `list`    | List your workspaces (repo, image, loaded state) |
-| `create <name>` | Create a workspace — default template or `--from <ws>`, optional `--image` |
-| `load <name>`   | Hydrate into tmpfs; start a container (if image) + tmux session |
+| `list`    | List your workspaces (vault, image, loaded state) |
+| `create <name>` | Create a workspace (bare git repo) — default template or `--from <ws>`, optional `--image` |
+| `load <name>`   | `git clone` a workspace into tmpfs; container (if image) + tmux session |
 | `attach <name>` | Attach to a loaded workspace's session (inside its container) |
-| `commit <name>` | Write changes back — `--as <name>`, `--force`, `--repo` |
-| `status [name]` | Repo overview, or a workspace's pending diff |
+| `commit <name>` | `git commit` + `git push` back to the vault (refuses on conflict) |
+| `status [name]` | Vault overview, or a workspace's live git state (dirty/ahead/behind) |
 | `stop <name>`   | Stop the container/session and drop the tmpfs copy |
 
-Repo setup (one-time):
+Vault setup (one-time):
 
 | Command | Purpose |
 |---------|---------|
-| `repo add <name> <path>` | Register a repo; the first becomes the default |
-| `repo list`              | List repos and availability |
-| `repo set-default <name>`| Change the default repo |
+| `vault add <name> <path>` | Register a vault; the first becomes the default |
+| `vault list`              | List vaults and availability |
+| `vault set-default <name>`| Change the default vault |
 
-Workspace commands default to the configured default repo (no `--repo` needed);
-pass `--repo`/`-r` to target another. Global: `--quiet`/`-q`, `--plain`.
-`load` takes `--no-session` and `--no-container`.
+Workspace commands default to the configured default vault (no `--vault` needed);
+pass `--vault` to target another. Global: `--quiet`/`-q`, `--plain`.
+`load` takes `--no-session`, `--no-container`, and `--clean` (re-clone fresh);
+`commit` takes `-m <message>`.
 
-Integration tests (real tmux/Podman) run with `go test -tags integration ./...`.
+Requires `git` on PATH; `tmux`/`podman` optional (degrade to host-only).
+Integration tests run with `go test -tags integration ./...`.
 
 ## Architecture
 
@@ -48,27 +50,28 @@ internal/
   domain/             pure types + sentinel errors (no I/O)
   platform/           SD-safe paths, mountinfo, flock, statfs, exec runner
   ui/                 Reporter interface + Lip Gloss neon theme
-  config/             TOML user config + repo registry
-  repo/               (Phase 1) resolution, availability, index.toml
-  hydration/          (Phase 2) copy repo → tmpfs + manifest
-  workspace/          (Phase 2) load orchestration
-  session/ runtime/ env/   (Phase 3) tmux / podman / bananenv adapters
-  commit/             (Phase 4) diff, conflict detection, write-back
+  config/             TOML user config + vault registry
+  vault/              resolution, availability, index.toml (the catalog)
+  git/                git adapter: workspaces are bare repos in the vault
+  workspace/          load orchestration (clone + session/container seams)
+  session/ runtime/   tmux / podman adapters (via platform.Runner)
+  template/           embedded default workspace skeleton
 ```
 
 Config lives on the SD card (`$XDG_CONFIG_HOME/neonroot/config.toml`); all state,
 workspaces, and locks are redirected to tmpfs (`/run/user/$UID`, `/tmp`).
+The vault stores the catalog (`index.toml`) and a bare git repo per workspace.
 
 ## Quick Start
 
 ```bash
 go build -o neonroot .
 
-neonroot repo add ext /mnt/ext/neonroot   # one-time: becomes the default repo
+neonroot vault add ext /mnt/ext/neonroot   # one-time: becomes the default vault
 neonroot create webapp --image arch-minimal
-neonroot load webapp                       # hydrate + container + tmux; unplug the drive
-# ... work untethered ...
-neonroot commit webapp                     # re-plug, write changes back
+neonroot load webapp                       # git clone + container + tmux; unplug the drive
+# ... work untethered (commit locally offline) ...
+neonroot commit webapp                     # re-plug, push changes back
 ```
 
 Version: **0.0.2**

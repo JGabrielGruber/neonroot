@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/JGabrielGruber/neonroot/internal/domain"
-	"github.com/JGabrielGruber/neonroot/internal/hydration"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 	"github.com/JGabrielGruber/neonroot/internal/ui"
 	"github.com/JGabrielGruber/neonroot/internal/vault"
@@ -30,97 +29,111 @@ type Sessions interface {
 // declares an image is started inside a container; one that does not (or when
 // the runtime is unavailable) runs host-only.
 type Runtime interface {
-	// Available reports whether the container runtime is usable.
 	Available() bool
-	// Start launches a container for the workspace bind-mounted at
-	// workspaceDir and returns its ID.
 	Start(ctx context.Context, image, name, workspaceDir string) (string, error)
-	// ExecArgs returns the session command to open a shell inside the container.
 	ExecArgs(containerID string) []string
 }
 
-// Loader hydrates workspaces from vaults into tmpfs.
+// Git is the version-control capability Load uses to clone a workspace's bare
+// repo from the vault into tmpfs and to detect pending work for safe reuse.
+type Git interface {
+	Clone(ctx context.Context, origin, dst string) error
+	// PendingWork reports whether a loaded clone has uncommitted or unpushed work.
+	PendingWork(ctx context.Context, worktree string) (bool, error)
+}
+
+// Loader clones workspaces from a vault into tmpfs.
 type Loader struct {
 	Paths platform.Paths
 	UI    ui.Reporter
-	// Sessions, if set, starts a host session for the workspace after
-	// hydration. A session failure degrades gracefully — it never fails a load.
+	Git   Git
+	// Sessions/Runtime start a host session / container after the clone; both
+	// degrade gracefully — a failure there never fails a load.
 	Sessions Sessions
-	// Runtime, if set, starts a container for workspaces that declare an image.
-	Runtime Runtime
+	Runtime  Runtime
 	// NoContainer forces host-only even when a workspace declares an image.
 	NoContainer bool
+	// Clean discards an already-loaded clone (uncommitted work included) and
+	// re-clones fresh. Without it, an already-loaded workspace is reused.
+	Clean bool
 }
 
-// Load hydrates the named workspace from vault r into tmpfs and records the
-// manifest and state needed to commit it back later. It refuses to run if the
-// vault's drive is not mounted or if the workspace is already loaded.
-func (l *Loader) Load(r domain.Vault, name string) (*domain.Workspace, error) {
-	// The drive must be reachable to read from.
-	state, err := vault.StateLive(r.Path)
+// Load clones the named workspace from vault v into tmpfs and records its state.
+// It refuses if the vault is unreachable or the workspace is unknown. If the
+// workspace is already loaded it is reused (non-destructive) unless Clean is set.
+func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
+	state, err := vault.StateLive(v.Path)
 	if err != nil {
 		return nil, err
 	}
 	if state != domain.VaultStateAvailable {
 		return nil, fmt.Errorf("%w: %q at %s — plug in the drive and retry",
-			domain.ErrVaultUnavailable, r.Name, r.Path)
+			domain.ErrVaultUnavailable, v.Name, v.Path)
 	}
 
-	idx, err := vault.ReadIndex(r.Path)
+	idx, err := vault.ReadIndex(v.Path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("%w: vault %q has no workspaces", domain.ErrWorkspaceNotFound, r.Name)
+		return nil, fmt.Errorf("%w: vault %q has no workspaces", domain.ErrWorkspaceNotFound, v.Name)
 	}
 	if err != nil {
 		return nil, err
 	}
 	entry, ok := vault.Workspace(idx, name)
 	if !ok {
-		return nil, fmt.Errorf("%w: %q in vault %q", domain.ErrWorkspaceNotFound, name, r.Name)
+		return nil, fmt.Errorf("%w: %q in vault %q", domain.ErrWorkspaceNotFound, name, v.Name)
 	}
 
-	if IsLoaded(l.Paths, name) {
-		return nil, fmt.Errorf("%w: %q (commit or drop it first)", domain.ErrWorkspaceExists, name)
-	}
-
-	src := filepath.Join(r.Path, entry.Root)
 	dst := l.Paths.WorkspaceRoot(name)
+	ctx := context.Background()
 
-	// A leftover payload without a state file: clear it so hydration is clean.
-	_ = os.RemoveAll(dst)
+	// Non-destructive reuse: an already-loaded workspace is kept as-is unless the
+	// user explicitly asks to --clean. --clean must not silently discard pending
+	// work (uncommitted OR unpushed) — warn loudly first.
+	if IsLoaded(l.Paths, name) {
+		if !l.Clean {
+			ws, err := ReadState(l.Paths, name)
+			if err != nil {
+				return nil, err
+			}
+			l.UI.Info(fmt.Sprintf("%q is already loaded — reusing (use --clean to re-clone)", name))
+			return ws, nil
+		}
+		if l.Git != nil {
+			if pending, _ := l.Git.PendingWork(ctx, dst); pending {
+				l.UI.Warn(fmt.Sprintf("--clean is discarding uncommitted or unpushed work in %q", name))
+			}
+		}
+		_ = os.RemoveAll(dst)
+		_ = os.RemoveAll(l.Paths.WorkspaceStateDir(name))
+	}
+
+	origin := filepath.Join(v.Path, entry.Root)
 	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 		return nil, err
 	}
-
-	man, err := hydration.Hydrate(name, src, dst, l.UI)
-	if err != nil {
-		// Roll back a partial payload so a failed load leaves no half-state.
+	l.UI.Step(fmt.Sprintf("cloning %q from %q", name, v.Name))
+	if err := l.Git.Clone(ctx, origin, dst); err != nil {
 		_ = os.RemoveAll(dst)
-		return nil, err
-	}
-
-	if err := hydration.WriteManifest(l.Paths.ManifestPath(name), man); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cloning %q: %w", name, err)
 	}
 
 	ws := &domain.Workspace{
-		Name:              name,
-		SourceVault:       r.Name,
-		Root:              dst,
-		HydratedAt:        time.Now().UTC().Format(time.RFC3339),
-		SourceFingerprint: vault.Fingerprint(idx),
-		Image:             entry.Image,
+		Name:        name,
+		SourceVault: v.Name,
+		Root:        dst,
+		HydratedAt:  time.Now().UTC().Format(time.RFC3339),
+		Image:       entry.Image,
 	}
 	if err := WriteState(l.Paths, ws); err != nil {
 		return nil, err
 	}
 
-	// Optionally start a container for a workspace that declares an image. The
-	// session then execs a shell inside it; otherwise the session is host-only.
-	// Any container failure degrades to host-only — it never fails the load.
+	// Optionally start a container for a workspace that declares an image; the
+	// session then execs a shell inside it. Any failure degrades to host-only.
 	var command []string
 	if entry.Image != "" && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
 		l.UI.Step(fmt.Sprintf("starting container (%s)", entry.Image))
-		cid, err := l.Runtime.Start(context.Background(), entry.Image, containerName(name), dst)
+		cid, err := l.Runtime.Start(ctx, entry.Image, containerName(name), dst)
 		if err != nil {
 			l.UI.Warn(fmt.Sprintf("container not started (host-only): %v", err))
 		} else {
@@ -132,8 +145,6 @@ func (l *Loader) Load(r domain.Vault, name string) (*domain.Workspace, error) {
 		}
 	}
 
-	// Start a host session so the user can attach immediately. Graceful
-	// degradation: if tmux is missing or errors, the workspace is still loaded.
 	if l.Sessions != nil {
 		l.UI.Step("starting session")
 		if err := l.Sessions.Ensure(name, dst, command); err != nil {

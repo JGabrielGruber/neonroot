@@ -5,24 +5,19 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/JGabrielGruber/neonroot/internal/commit"
 	"github.com/JGabrielGruber/neonroot/internal/domain"
+	"github.com/JGabrielGruber/neonroot/internal/git"
 	"github.com/JGabrielGruber/neonroot/internal/workspace"
 )
 
-var (
-	commitVaultFlag string
-	commitAsFlag    string
-	commitForceFlag bool
-)
+var commitMessageFlag string
 
 var commitCmd = &cobra.Command{
 	Use:   "commit <workspace>",
-	Short: "Write workspace changes back to a vault",
-	Long: `Writes a loaded workspace's changes back to cold storage. By default it
-commits in place (only the changed files) to the vault it was loaded from, after
-checking the vault has not changed underneath you. Use --as to save a copy under
-a new name, --vault to target a different vault, and --force to override.`,
+	Short: "Commit and push a workspace's changes back to its vault",
+	Long: `Commits the workspace's current changes and pushes them to its vault. If
+the vault moved ahead since you loaded (someone else committed), the push is
+refused rather than overwriting — resolve it with the conflict flags.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
@@ -32,64 +27,50 @@ a new name, --vault to target a different vault, and --force to override.`,
 			return err
 		}
 
-		targetName := commitVaultFlag
-		if targetName == "" {
-			targetName = ws.SourceVault
-		}
-		target, err := app.resolveVault(targetName)
-		if err != nil {
-			return err
-		}
-		if err := app.requireAvailable(target); err != nil {
-			return err
+		g := &git.Git{Runner: app.Runner}
+		if !g.Available() {
+			return fmt.Errorf("git is required but was not found on PATH")
 		}
 
-		lock, err := app.lock("vault-" + target.Name)
-		if err != nil {
-			return err
+		msg := commitMessageFlag
+		if msg == "" {
+			msg = "neonroot commit"
 		}
-		defer lock.Unlock()
-
-		committer := &commit.Committer{Paths: app.Paths, UI: app.UI}
-		res, err := committer.Commit(ws, target, commit.Options{AsName: commitAsFlag, Force: commitForceFlag})
+		committed, err := g.CommitAll(cmd.Context(), ws.Root, msg)
 		if err != nil {
 			return err
 		}
 
-		reportCommit(res)
+		// Push requires the vault to be reachable; check for a clear message
+		// rather than an opaque git error when the drive is unplugged.
+		v, err := app.resolveVault(ws.SourceVault)
+		if err != nil {
+			return err
+		}
+		if err := app.requireAvailable(v); err != nil {
+			return err
+		}
+
+		rejected, err := g.Push(cmd.Context(), ws.Root)
+		if err != nil {
+			return err
+		}
+		if rejected {
+			return fmt.Errorf("%w: vault %q moved ahead since you loaded %q — "+
+				"reload and merge, or re-run with a conflict flag (Phase E)",
+				domain.ErrCommitConflict, ws.SourceVault, name)
+		}
+
+		if committed {
+			app.UI.Success(fmt.Sprintf("committed and pushed %q to %q", name, ws.SourceVault))
+		} else {
+			app.UI.Success(fmt.Sprintf("no new changes; pushed any pending commits for %q", name))
+		}
 		return nil
 	},
 }
 
-func reportCommit(res *commit.Result) {
-	if res.SavedAs {
-		app.UI.Success(fmt.Sprintf("saved to vault %q as %q: %d file(s), revision %d",
-			res.TargetRepo, res.TargetName, res.FileCount, res.Revision))
-		return
-	}
-	if len(res.Changes) == 0 {
-		app.UI.Info("nothing to commit — workspace matches the vault")
-		return
-	}
-	var added, modified, deleted int
-	for _, c := range res.Changes {
-		app.UI.Info(fmt.Sprintf("  %-8s %s", c.Kind, c.Path))
-		switch c.Kind {
-		case domain.ChangeAdded:
-			added++
-		case domain.ChangeModified:
-			modified++
-		case domain.ChangeDeleted:
-			deleted++
-		}
-	}
-	app.UI.Success(fmt.Sprintf("committed to %q: +%d ~%d -%d, revision %d",
-		res.TargetRepo, added, modified, deleted, res.Revision))
-}
-
 func init() {
-	commitCmd.Flags().StringVarP(&commitVaultFlag, "vault", "", "", "target vault (default: the vault it was loaded from)")
-	commitCmd.Flags().StringVar(&commitAsFlag, "as", "", "save under a new workspace name instead of committing in place")
-	commitCmd.Flags().BoolVar(&commitForceFlag, "force", false, "override a conflict or overwrite an existing target")
+	commitCmd.Flags().StringVarP(&commitMessageFlag, "message", "m", "", "commit message")
 	rootCmd.AddCommand(commitCmd)
 }

@@ -146,11 +146,14 @@ available.
 - **Phase C — Hot-storage usage in `status`.** ✅ **Done (non-git part).** `status`
   now shows a "hot storage" section: per-loaded-workspace tmpfs footprint + total
   (`workspace.HotSize`). Live dirty/ahead state arrives with git (Phase D).
-- **Phase D — Git workspace lifecycle.** New `internal/git` adapter (via
-  `platform.Runner`). `create`=`init --bare`+seed, `load`=`clone`, `status`=`git
-  status`+ahead/behind, `commit`=commit+push (**refuse on non-ff**). Retires
-  `internal/commit` + the workspace manifest. Non-destructive reuse (dirty **or**
-  unpushed) from day one.
+- **Phase D — Git workspace lifecycle.** ✅ **Done.** New `internal/git` adapter
+  (via `platform.Runner`): `create`=`init --bare` (HEAD pinned to main) + seed,
+  `load`=`clone --no-hardlinks --single-branch`, `status`=dirt + ahead/behind,
+  `commit`=commit + push (**refuses on non-ff** → exit 5). Non-destructive reuse
+  (dirty **or** unpushed) with `--clean` opt-in. Retired `internal/commit` and
+  `internal/hydration` (both deleted, workspace state shrunk, git owns content
+  history). Verified end-to-end with real git: create→load→edit→commit→push;
+  reuse; conflict→exit 5; --clean; offline (usable untethered, commit→exit 3).
 - **Phase E — Conflict-resolution flags.** `commit --rebase`/`--merge`, `--as
   <branch>`, `--force`→`--force-with-lease`.
 - **Phase F — Image data in the vault.** `images/<name>/{Containerfile,image.tar}`;

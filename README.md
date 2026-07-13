@@ -10,15 +10,17 @@ drive when you choose. It never writes to the SD card it boots from.
 
 ## Commands
 
-| Command  | Status | Purpose |
-|----------|--------|---------|
-| `list`   | ✅ working | List configured repos (name → path) |
-| `load`   | 🚧 Phase 2 | Hydrate a workspace from a repo into tmpfs |
-| `status` | 🚧 Phase 1/4 | Show loaded workspaces and pending changes |
-| `create` | 🚧 Phase 1 | Create a new empty workspace in a repo |
-| `commit` | 🚧 Phase 4 | Write workspace changes back to a repo |
+| Command    | Status | Purpose |
+|------------|--------|---------|
+| `list`     | ✅ working | List repos with availability |
+| `status`   | ✅ working | Show repos, availability, and contents |
+| `create`   | ✅ working | Create a new empty workspace in a repo |
+| `repo add` | ✅ working | Register a repo path in config |
+| `load`     | 🚧 Phase 2 | Hydrate a workspace from a repo into tmpfs |
+| `commit`   | 🚧 Phase 4 | Write workspace changes back to a repo |
 
 Global flags: `--quiet`/`-q` (warnings only), `--plain` (no color).
+`create` takes `--repo`/`-r` to target a repo (defaults to the configured default).
 
 ## Architecture
 

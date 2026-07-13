@@ -116,10 +116,12 @@ testable deliverable (unit-testable with fakes; no drive/Podman needed until Pha
   (SD-safe xdg, statfs, flock, mountinfo), `internal/config` (TOML + registry),
   `internal/ui` (Reporter + neon theme), `App` composition root, all commands →
   `RunE`, `pkg/` removed, deps added. `list` works. Binary ~7 MB.
-- **Phase 1 — Repo resolution & availability.** `internal/repo`: name→path resolve,
-  `index.toml` read/write with `schema_version` (reject unknown major →
-  `ErrIndexVersionUnsupported`), `RepoState`, source fingerprint. `list` shows
-  availability; `create` real.
+- **Phase 1 — Repo resolution & availability.** ✅ **Done.** `internal/repo`:
+  `index.toml` read/write with `schema_version` rejection, `RepoState` via
+  mountinfo (distinct-mount vs stale-mountpoint), `Fingerprint`, atomic writes,
+  `Bump`. `list` shows availability, `status` shows repo contents, `create`
+  initializes a repo + adds a workspace (flock-guarded), `repo add` registers a
+  repo path in config. Clean `ErrRepoUnavailable`/`ErrRepoNotFound` exit codes.
 - **Phase 2 — Hydration.** `internal/hydration`: copy→tmpfs with per-file progress,
   build manifest, statfs pre-flight. `internal/workspace.Load` orchestrates. `load`
   fully works.

@@ -4,12 +4,14 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"github.com/JGabrielGruber/neonroot/internal/platform"
+	"github.com/JGabrielGruber/neonroot/internal/repo"
 )
 
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List configured repos",
-	Long:  "Lists the repos registered in config, including the built-in scratch repo.",
+	Short: "List configured repos and their availability",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		repos := app.Config.Repos
@@ -17,10 +19,19 @@ var listCmd = &cobra.Command{
 			app.UI.Info("no repos configured")
 			return nil
 		}
-		// Availability resolution lands in Phase 1; for now list name → path.
+		// Read the mount table once and resolve every repo against it.
+		mounts, err := platform.Mounts()
+		if err != nil {
+			return err
+		}
 		out := cmd.OutOrStdout()
 		for _, r := range repos {
-			fmt.Fprintf(out, "%-12s %s\n", r.Name, r.Path)
+			state := repo.State(r.Path, mounts)
+			marker := " "
+			if r.Name == app.Config.DefaultRepo {
+				marker = "*"
+			}
+			fmt.Fprintf(out, "%s %-12s %-11s %s\n", marker, r.Name, state, r.Path)
 		}
 		return nil
 	},

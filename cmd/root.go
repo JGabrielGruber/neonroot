@@ -11,6 +11,7 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/config"
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
+	"github.com/JGabrielGruber/neonroot/internal/repo"
 	"github.com/JGabrielGruber/neonroot/internal/ui"
 )
 
@@ -70,11 +71,50 @@ func buildApp() (*App, error) {
 		return nil, err
 	}
 	// The built-in scratch repo lives on tmpfs so there is always a target.
-	cfg.EnsureScratch(filepath.Join(paths.Cache, "scratch"))
+	scratchPath := filepath.Join(paths.Cache, "scratch")
+	cfg.EnsureScratch(scratchPath)
+	if err := ensureScratchRepo(scratchPath); err != nil {
+		return nil, err
+	}
 
 	reporter := ui.NewStderr(ui.Options{Quiet: flags.quiet, ForcePlain: flags.plain})
 
 	return &App{Paths: paths, Config: cfg, UI: reporter}, nil
+}
+
+// ensureScratchRepo materializes the tmpfs scratch repo: its directory and an
+// initial index, so it is immediately available and usable as a target.
+func ensureScratchRepo(path string) error {
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return err
+	}
+	if _, err := os.Stat(repo.IndexPath(path)); errors.Is(err, os.ErrNotExist) {
+		return repo.WriteIndex(path, repo.NewIndex())
+	}
+	return nil
+}
+
+// resolveRepo returns the repo registered under name, or the default repo when
+// name is empty.
+func (a *App) resolveRepo(name string) (domain.Repo, error) {
+	if name == "" {
+		name = a.Config.DefaultRepo
+	}
+	r, ok := a.Config.Repo(name)
+	if !ok {
+		return domain.Repo{}, fmt.Errorf("%w: %q", domain.ErrRepoNotFound, name)
+	}
+	return r, nil
+}
+
+// lockRepo takes a non-blocking advisory lock guarding mutations to a repo,
+// scoped by repo name and held under the runtime tmpfs (never the card).
+func (a *App) lockRepo(name string) (*platform.FileLock, error) {
+	dir := filepath.Join(a.Paths.Runtime, "locks")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	return platform.TryLock(filepath.Join(dir, name+".lock"))
 }
 
 // Execute runs the CLI, rendering sentinel errors with clear messages and

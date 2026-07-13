@@ -29,12 +29,12 @@ Workspace commands (the everyday surface):
 | `stop <name>`   | Stop the container/pod + session and drop the tmpfs copy |
 | `rm <name>`     | Delete a workspace from its vault (stop it first) |
 
-Sessions: a **containerized** workspace's `attach` execs straight into the
-container, opening its **tmux** by default (so in-container session saving works,
-e.g. resurrect/continuum) — falling back to bash/sh if tmux isn't installed.
-Override per workspace with `create/set --shell "<cmd>"`. A **host-only**
-workspace uses host tmux, recreated if you exited it (Ctrl-D). Either way the
-workspace/container persists until `stop`, so you can always `attach` back in.
+Sessions: a **containerized** workspace's `attach` execs a plain shell into the
+container (bash/sh) — NeonRoot doesn't impose tmux, so it never nests inside the
+tmux you already run on the host. The image still ships tmux + configs; opt in
+with `create/set --shell "tmux new-session -A -s main"` or just run `tmux`
+inside. A **host-only** workspace uses a host tmux session, recreated if you
+exited it (Ctrl-D). The workspace/container persists until `stop`.
 
 Image management (`neonroot image …`):
 

@@ -14,11 +14,11 @@ import (
 var attachCmd = &cobra.Command{
 	Use:   "attach <workspace>",
 	Short: "Attach to a loaded workspace's session",
-	Long: `Attaches to the workspace's session. For a containerized workspace it
-execs into the container (opening its tmux, so session saving works); for a
-host-only workspace it attaches host tmux, recreating it if you had exited it.
-The workspace and its container persist until 'neonroot stop', so you can always
-get back in.`,
+	Long: `Attaches to the workspace. For a containerized workspace it execs a shell
+into the container (bash/sh by default, or the workspace's --shell); run your own
+tmux around it as usual. For a host-only workspace it uses a host tmux session,
+recreated if you had exited it. The workspace and its container persist until
+'neonroot stop', so you can always get back in.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]

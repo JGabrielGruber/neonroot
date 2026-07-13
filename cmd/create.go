@@ -165,6 +165,6 @@ func init() {
 	createCmd.Flags().StringVar(&createImageFlag, "image", "", "vault image the workspace runs inside (default: host-only)")
 	createCmd.Flags().StringVar(&createMountFlag, "mount", "", "where the workspace mounts inside the container (default: /workspace)")
 	createCmd.Flags().StringVar(&createTemplateFlag, "template", "default", "starter template (see 'neonroot template ls')")
-	createCmd.Flags().StringVar(&createShellFlag, "shell", "", "command to run on attach into the container (default: tmux, else bash)")
+	createCmd.Flags().StringVar(&createShellFlag, "shell", "", "command to run on attach into the container (default: a login shell)")
 	rootCmd.AddCommand(createCmd)
 }

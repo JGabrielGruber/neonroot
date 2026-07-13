@@ -211,12 +211,13 @@ func (p *Podman) Save(ctx context.Context, ref, tarPath string) error {
 	return err
 }
 
-// DefaultShell opens the container's tmux session (so continuum session-saving
-// works) when tmux is installed, and falls back to bash, then plain sh, so it
-// works in any image.
+// DefaultShell opens a plain login shell in the container (bash, else sh).
+// NeonRoot deliberately does NOT impose tmux here: you likely run your own tmux
+// on the host, and forcing a container-side tmux would nest inside it. To work
+// in the image's tmux (e.g. arch-dev's, with session saving), run `tmux` once
+// inside, or set the workspace shell: `set <ws> --shell "tmux new-session -A"`.
 var DefaultShell = []string{"sh", "-c",
-	"if command -v tmux >/dev/null 2>&1; then exec tmux new-session -A -s neonroot; " +
-		"elif command -v bash >/dev/null 2>&1; then exec bash -l; else exec sh; fi"}
+	"if command -v bash >/dev/null 2>&1; then exec bash -l; else exec sh; fi"}
 
 // ExecArgs returns the full command (argv) to open an interactive session inside
 // a container. command overrides the shell (empty uses DefaultShell). It carries

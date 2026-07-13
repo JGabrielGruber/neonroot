@@ -1,4 +1,13 @@
 # NeonRoot arch-dev shell.
+
+# Auto-start tmux for interactive sessions: attach the existing session or start
+# a new one (continuum restores the last one). This is where the dev session
+# lives — with session saving — so NeonRoot just execs bash and the image owns
+# tmux. Guarded so it never nests or fires in scripts.
+if command -v tmux >/dev/null 2>&1 && [ -z "$TMUX" ] && [[ $- == *i* ]]; then
+  exec tmux new-session -A -s main
+fi
+
 export EDITOR=nvim
 export VISUAL=nvim
 
@@ -16,6 +25,3 @@ command -v starship >/dev/null && eval "$(starship init bash)"
 command -v zoxide  >/dev/null && eval "$(zoxide init bash)"
 [ -f /usr/share/fzf/key-bindings.bash ] && source /usr/share/fzf/key-bindings.bash
 [ -f /usr/share/fzf/completion.bash ]  && source /usr/share/fzf/completion.bash
-
-# Start where the workspace is mounted.
-cd /workspace 2>/dev/null || true

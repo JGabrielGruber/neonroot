@@ -1,0 +1,3 @@
+# Login shells (bash -l, which is how NeonRoot attaches) read this; source
+# .bashrc so the interactive setup — including tmux auto-start — always runs.
+[ -f ~/.bashrc ] && . ~/.bashrc

@@ -31,7 +31,10 @@ RUN git clone --depth 1 https://github.com/tmux-plugins/tmux-resurrect /root/.tm
 RUN mkdir -p /root/.config && starship preset nerd-font-symbols -o /root/.config/starship.toml
 
 # Shell + tmux config (edit the copies in this image's dotfiles/ to customize).
+# .bash_profile sources .bashrc, which auto-starts tmux — NeonRoot execs bash,
+# the image drives the session.
 COPY dotfiles/bashrc /root/.bashrc
+COPY dotfiles/bash_profile /root/.bash_profile
 COPY dotfiles/tmux.conf /root/.tmux.conf
 
 ENV EDITOR=nvim VISUAL=nvim

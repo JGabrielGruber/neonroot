@@ -137,9 +137,13 @@ testable deliverable (unit-testable with fakes; no drive/Podman needed until Pha
   `stop` (kill session + drop tmpfs copy). Real-Podman-on-tmpfs validation lives
   in a `//go:build integration` suite. **Flag still open:** run that suite on the
   Arch image to confirm rootless overlay-on-tmpfs behavior.
-- **Phase 4 — Commit & dirty-tracking.** `internal/commit`: rescan+diff, conflict
-  detection, write-back, `--as`/`--force`; clean `ErrRepoUnavailable` when drive
-  absent. `commit` + diff-mode `status` real.
+- **Phase 4 — Commit & dirty-tracking.** ✅ **Done.** `internal/commit`: `Diff`
+  (added/modified/deleted, mtime-then-hash), `HasConflict` vs source fingerprint,
+  in-place `ApplyDiff` (delta-only write-back), `UpdateManifest` re-baseline, and
+  a `Committer` handling in-place vs save-as. `commit <ws> [--repo][--as][--force]`
+  and diff-mode `status <ws>` are real. Verified end-to-end: edit → status diff →
+  commit → drive updated → clean; conflict → exit 5; `--as` copy; `--force`
+  override. hydration refactored to share identity/copy helpers with commit.
 - **Phase 5 — Polish.** Multi-bar hydration, `--quiet`/`--json`, `env`/Bananenv
   provisioning hook, shell completion, richer `status`/interactive `list`, docs.
   Deferred: overlayfs experiment, udev plug detection.

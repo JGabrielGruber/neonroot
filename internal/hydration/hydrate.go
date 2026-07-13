@@ -2,6 +2,10 @@
 // a load-time manifest of everything copied. The manifest is what a later
 // commit diffs against to compute exactly which files changed. Hydration is the
 // slow path, so it reports steady progress through a ui.Reporter.
+//
+// The file-identity helpers (HashFile, SymlinkHash, EntryOf) and copy helpers
+// (CopyFile, CopySymlink) are shared with the commit package so hydration and
+// commit compute identity the same way — a divergence would corrupt diffs.
 package hydration
 
 import (
@@ -17,6 +21,11 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 	"github.com/JGabrielGruber/neonroot/internal/ui"
 )
+
+// symlinkPrefix distinguishes a symlink's target hash from a regular file hash
+// in a manifest entry, so a file and a symlink with coincidentally equal hashes
+// never compare equal.
+const symlinkPrefix = "link:"
 
 // Hydrate copies src into dst, building and returning the load-time manifest.
 // It pre-flights free space against the filesystem backing dst so a copy into
@@ -56,20 +65,22 @@ func Hydrate(workspace, src, dst string, rep ui.Reporter) (*domain.Manifest, err
 			return os.MkdirAll(target, info.Mode().Perm())
 
 		case d.Type()&fs.ModeSymlink != 0:
-			entry, err := copySymlink(path, target, rel)
+			entry, err := CopySymlink(path, target)
 			if err != nil {
 				return err
 			}
+			entry.Path = rel
 			man.Files = append(man.Files, entry)
 			return nil
 
 		case d.Type().IsRegular():
-			entry, n, err := copyFile(path, target, rel)
+			entry, err := CopyFile(path, target)
 			if err != nil {
 				return err
 			}
+			entry.Path = rel
 			man.Files = append(man.Files, entry)
-			done += n
+			done += entry.Size
 			rep.Progress("copying", done, total)
 			return nil
 
@@ -107,68 +118,114 @@ func TreeSize(root string) (int64, error) {
 	return total, err
 }
 
-// copyFile copies a regular file, preserving mode and mtime, and returns its
-// manifest entry. The content hash is computed in the same read as the copy via
-// an io.MultiWriter, so hydration never reads a file twice.
-func copyFile(src, dst, rel string) (domain.FileEntry, int64, error) {
+// HashFile returns the fast non-crypto content hash of a regular file.
+func HashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := fnv.New64a()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// SymlinkHash returns the manifest hash for a symlink with the given target.
+func SymlinkHash(target string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(target))
+	return symlinkPrefix + hex.EncodeToString(h.Sum(nil))
+}
+
+// EntryOf computes a manifest entry for the file at abs (regular or symlink)
+// without copying it. rel is the returned entry's Path.
+func EntryOf(abs, rel string) (domain.FileEntry, error) {
+	info, err := os.Lstat(abs)
+	if err != nil {
+		return domain.FileEntry{}, err
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		target, err := os.Readlink(abs)
+		if err != nil {
+			return domain.FileEntry{}, err
+		}
+		return domain.FileEntry{Path: rel, Size: int64(len(target)), Hash: SymlinkHash(target)}, nil
+	}
+	hash, err := HashFile(abs)
+	if err != nil {
+		return domain.FileEntry{}, err
+	}
+	return domain.FileEntry{
+		Path:    rel,
+		Size:    info.Size(),
+		ModTime: info.ModTime().UnixNano(),
+		Hash:    hash,
+	}, nil
+}
+
+// CopyFile copies a regular file, preserving mode and mtime, and returns its
+// manifest entry (Path unset — caller sets it). The content hash is computed in
+// the same read as the copy via an io.MultiWriter, so hydration never reads a
+// file twice.
+func CopyFile(src, dst string) (domain.FileEntry, error) {
 	in, err := os.Open(src)
 	if err != nil {
-		return domain.FileEntry{}, 0, err
+		return domain.FileEntry{}, err
 	}
 	defer in.Close()
 
 	info, err := in.Stat()
 	if err != nil {
-		return domain.FileEntry{}, 0, err
+		return domain.FileEntry{}, err
 	}
 
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return domain.FileEntry{}, err
+	}
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode().Perm())
 	if err != nil {
-		return domain.FileEntry{}, 0, err
+		return domain.FileEntry{}, err
 	}
 
 	h := fnv.New64a()
 	n, err := io.Copy(io.MultiWriter(out, h), in)
 	if err != nil {
 		out.Close()
-		return domain.FileEntry{}, 0, err
+		return domain.FileEntry{}, err
 	}
 	if err := out.Close(); err != nil {
-		return domain.FileEntry{}, 0, err
+		return domain.FileEntry{}, err
 	}
 
 	mtime := info.ModTime()
 	if err := os.Chtimes(dst, mtime, mtime); err != nil {
-		return domain.FileEntry{}, 0, err
+		return domain.FileEntry{}, err
 	}
 
 	return domain.FileEntry{
-		Path:    rel,
 		Size:    n,
 		ModTime: mtime.UnixNano(),
 		Hash:    hex.EncodeToString(h.Sum(nil)),
-	}, n, nil
+	}, nil
 }
 
-// copySymlink recreates a symlink at dst and records its target's hash, so a
-// retargeted link is detected as a change at commit time.
-func copySymlink(src, dst, rel string) (domain.FileEntry, error) {
-	link, err := os.Readlink(src)
+// CopySymlink recreates a symlink at dst and returns its manifest entry (Path
+// unset — caller sets it).
+func CopySymlink(src, dst string) (domain.FileEntry, error) {
+	target, err := os.Readlink(src)
 	if err != nil {
 		return domain.FileEntry{}, err
 	}
-	// Replace any existing entry so re-hydration is idempotent.
-	_ = os.Remove(dst)
-	if err := os.Symlink(link, dst); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return domain.FileEntry{}, err
 	}
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(link))
-	return domain.FileEntry{
-		Path: rel,
-		Size: int64(len(link)),
-		Hash: "link:" + hex.EncodeToString(h.Sum(nil)),
-	}, nil
+	_ = os.Remove(dst) // idempotent re-create
+	if err := os.Symlink(target, dst); err != nil {
+		return domain.FileEntry{}, err
+	}
+	return domain.FileEntry{Size: int64(len(target)), Hash: SymlinkHash(target)}, nil
 }
 
 func humanBytes(n int64) string {

@@ -160,6 +160,16 @@ func (g *Git) Push(ctx context.Context, worktree string) (rejected bool, err err
 	return false, err
 }
 
+// Snapshot creates a lightweight tag at the current HEAD and pushes it to the
+// vault — a labeled, immutable point-in-time copy of the workspace.
+func (g *Git) Snapshot(ctx context.Context, worktree, label string) error {
+	if _, err := g.run(ctx, worktree, "tag", label); err != nil {
+		return err
+	}
+	_, err := g.run(ctx, worktree, "push", "-q", "origin", "refs/tags/"+label)
+	return err
+}
+
 // PushBranch pushes the current HEAD to a named branch in origin. This is the
 // cheap "save a copy under a new name" (`commit --as <name>`): it never touches
 // the main branch, so it can't conflict.

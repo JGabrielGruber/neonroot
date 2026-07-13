@@ -11,6 +11,7 @@ package runtime
 
 import (
 	"context"
+	"os"
 	"strings"
 
 	"github.com/JGabrielGruber/neonroot/internal/platform"
@@ -144,8 +145,19 @@ func (p *Podman) Build(ctx context.Context, ref, containerfileDir string) error 
 	return err
 }
 
+// Commit captures a running container's current state as an image (podman
+// commit) under ref — how inside-container changes become durable image data.
+func (p *Podman) Commit(ctx context.Context, containerID, ref string) error {
+	args := append(p.baseArgs(), "commit", containerID, ref)
+	_, err := p.Runner.Run(ctx, "podman", args...)
+	return err
+}
+
 // Save writes an image's data to a tarball (podman save), for storage in a vault.
+// A prior tar is removed first — podman's docker-archive format cannot write
+// over an existing archive, and a save always produces a complete new one.
 func (p *Podman) Save(ctx context.Context, ref, tarPath string) error {
+	_ = os.Remove(tarPath)
 	args := append(p.baseArgs(), "save", "-o", tarPath, ref)
 	_, err := p.Runner.Run(ctx, "podman", args...)
 	return err

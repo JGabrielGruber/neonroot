@@ -10,6 +10,7 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/runtime"
 	"github.com/JGabrielGruber/neonroot/internal/template"
 	"github.com/JGabrielGruber/neonroot/internal/vault"
+	"github.com/JGabrielGruber/neonroot/internal/workspace"
 )
 
 var imageVaultFlag string
@@ -177,6 +178,52 @@ never removes a shared image.`,
 	},
 }
 
+var imageSnapshotCmd = &cobra.Command{
+	Use:   "snapshot <workspace>",
+	Short: "Capture a loaded workspace's running container as its image data",
+	Long: `Commits the workspace's running container (capturing changes you made
+inside it, e.g. installed packages) and saves it back as the image's data in the
+vault. This is how inside-container changes become durable and reproducible.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wsName := args[0]
+		ws, err := workspace.ReadState(app.Paths, wsName)
+		if err != nil {
+			return err
+		}
+		if ws.ContainerID == "" || len(ws.Images) == 0 {
+			return fmt.Errorf("workspace %q has no running container to snapshot", wsName)
+		}
+		v, err := app.resolveVault(ws.SourceVault)
+		if err != nil {
+			return err
+		}
+		if err := app.requireAvailable(v); err != nil {
+			return err
+		}
+		pod, err := app.podman()
+		if err != nil {
+			return err
+		}
+		if !pod.Available() {
+			return fmt.Errorf("podman is required but was not found on PATH")
+		}
+
+		image := ws.Images[0] // primary
+		ref := vault.ImageRef(image)
+		app.UI.Step(fmt.Sprintf("committing container of %q", wsName))
+		if err := pod.Commit(cmd.Context(), ws.ContainerID, ref); err != nil {
+			return err
+		}
+		app.UI.Step(fmt.Sprintf("saving image %q into the vault", image))
+		if err := pod.Save(cmd.Context(), ref, vault.ImageTarPath(v.Path, image)); err != nil {
+			return err
+		}
+		app.UI.Success(fmt.Sprintf("snapshotted %q into image %q in vault %q", wsName, image, v.Name))
+		return nil
+	},
+}
+
 // podBaseArgs exposes the storage-pinning args for ad-hoc podman calls.
 func podBaseArgs(p *runtime.Podman) []string {
 	return []string{"--root", p.GraphRoot, "--runroot", p.RunRoot}
@@ -186,6 +233,6 @@ func init() {
 	for _, c := range []*cobra.Command{imageCreateCmd, imageBuildCmd, imageLsCmd, imageRmCmd} {
 		c.Flags().StringVar(&imageVaultFlag, "vault", "", "vault holding the image (default: configured default vault)")
 	}
-	imageCmd.AddCommand(imageCreateCmd, imageBuildCmd, imageLsCmd, imageRmCmd)
+	imageCmd.AddCommand(imageCreateCmd, imageBuildCmd, imageLsCmd, imageRmCmd, imageSnapshotCmd)
 	rootCmd.AddCommand(imageCmd)
 }

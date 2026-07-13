@@ -174,8 +174,13 @@ available.
   definition + data from the vault and the tmpfs store; warns about referencing
   workspaces — never a side effect of `stop`). `--clean`/`--reload-image` on load
   formalized. Image `snapshot` lands in H.
-- **Phase H — Snapshots.** Workspace = git tag/branch; image = `podman commit`→
-  `save`→store (captures inside-container changes).
+- **Phase H — Snapshots.** ✅ **Done.** `snapshot <ws> <label>` tags the
+  workspace's commit and pushes the tag to the vault (durable point-in-time
+  copy). `image snapshot <ws>` does `podman commit` the running container →
+  `podman save` into the vault image.tar, making inside-container changes durable.
+  Verified with real git + podman (tag pushed; image.tar grew after committing a
+  container change). Fixed `Save` to remove a prior tar (docker-archive can't
+  overwrite).
 - **Phase I — Sidecars/pods + multi-workspace mounts (scope boundary, last).** Image
   list → per-workspace podman pod; a container mounting multiple workspaces. Podman
   pods only, no compose engine. Spike rootless-pod-on-tmpfs first.

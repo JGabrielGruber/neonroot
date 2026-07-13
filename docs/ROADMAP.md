@@ -5,16 +5,29 @@
 
 ## Vision
 
-NeonRoot is a portable, ephemeral dev-workspace manager for one concrete workflow:
-boot a lightweight Arch image from a **write-sensitive SD card**, keep heavy dev
-environments and data on an **external drive** (flash/HDD) that is only *briefly
-plugged in*, hydrate a workspace into **tmpfs/RAM** so the drive can be unplugged,
-work fully untethered, and later **explicitly commit** changes back to the drive
-when re-plugged.
+NeonRoot is a **hot/cold storage manager for dev workspaces** — more precisely, a
+**controller of when persistent storage gets written**. It keeps a working copy in
+**tmpfs/RAM** (hot) and syncs to/from a **vault** (cold), so you decide when the
+underlying storage is actually written. Two value props from one mechanism:
+
+- **Portability** — vault on a removable drive: `load`, unplug, work untethered,
+  sync back when re-plugged.
+- **Write-batching** — vault on a path in the SD-card home (e.g. `$HOME/.claude`):
+  run against the RAM copy and sync back only on demand, so a write-sensitive card
+  is written in controlled bursts, not constantly.
+
+A **workspace** is decoupled from any runtime: a mountable hot directory usable
+directly on the host, or bind-mounted into a container. Multiple workspaces can be
+hot at once, each preserving its own pending changes.
 
 Core philosophy: **complex simplicity** — a small static binary, clear commands,
 predictable behavior, minimal magic. Linux-first (Arch/Manjaro), leaning on native
 Linux facilities rather than reinventing them.
+
+> **Evolving (v0.1):** the cold store is being renamed **repo → vault**, workspaces
+> are moving to **git** (a bare repo per workspace inside the vault; offline
+> clone/commit/push), and images gain **stored data** (`podman save` tarballs in the
+> vault) so containers run untethered. See the Evolution section below.
 
 ## Two invariants (drive every decision)
 
@@ -107,7 +120,49 @@ the whole unplugged session; the same walk powers `status`):
   `--as <newname>` or explicit `--force`. NeonRoot **detects and redirects; it does
   not merge** (out of scope).
 
-## Phased delivery
+## Evolution (v0.1) — vault, git-backed workspaces, image data
+
+The foundation (Phases 0–6 below) is shipped. This evolution sharpens the identity
+and swaps two hand-rolled subsystems for battle-tested tools. Governing splits:
+**`index.toml` = catalog/metadata; git = workspace content history.** "Dirty" means
+working-tree changes **or unpushed commits** (both precious). Non-destructive by
+default is an invariant, baked into every reuse path. Vault availability generalizes:
+a removable drive can be unavailable, an always-present home path is always
+available.
+
+- **Phase A — Git round-trip spike.** ✅ **Done (GO).** Validated on git 2.54:
+  `init --bare` → `clone --no-hardlinks --single-branch` into `/dev/shm` →
+  **offline commit with the vault moved away** → replug → **push** — full round-trip
+  works, and the tmpfs clone is independent of the drive (object link count 1).
+  Non-fast-forward push is rejected (conflict as designed); `--force-with-lease`
+  refuses when a concurrent writer pushed. **Gotcha pinned:** `init --bare` leaves
+  `HEAD`→`master`; `create` must `git symbolic-ref HEAD refs/heads/main` so clones
+  default correctly.
+- **Phase B — Vault rename.** `repo`→`vault` everywhere (`internal/repo`→
+  `internal/vault`, `domain.Repo`→`Vault`, config `[[vault]]`/`default_vault`, `vault`
+  command tree, `--vault` flag). `index.toml` format unchanged. Mechanical; lands first.
+- **Phase C — Hot-storage usage in `list`/`status`.** Which workspaces are hot, live
+  dirty/ahead state, tmpfs footprint.
+- **Phase D — Git workspace lifecycle.** New `internal/git` adapter (via
+  `platform.Runner`). `create`=`init --bare`+seed, `load`=`clone`, `status`=`git
+  status`+ahead/behind, `commit`=commit+push (**refuse on non-ff**). Retires
+  `internal/commit` + the workspace manifest. Non-destructive reuse (dirty **or**
+  unpushed) from day one.
+- **Phase E — Conflict-resolution flags.** `commit --rebase`/`--merge`, `--as
+  <branch>`, `--force`→`--force-with-lease`.
+- **Phase F — Image data in the vault.** `images/<name>/{Containerfile,image.tar}`;
+  `load` does `podman load` **straight from the drive** (tar never staged in RAM).
+  Image reference modeled as a **list** from the start; `image build` producer;
+  configurable container mount target.
+- **Phase G — Command split + reuse flags.** `neonroot image …` subtree; formalize
+  `--clean`/`--reload-image`; explicit `image rm` (never a side effect of `stop`).
+- **Phase H — Snapshots.** Workspace = git tag/branch; image = `podman commit`→
+  `save`→store (captures inside-container changes).
+- **Phase I — Sidecars/pods + multi-workspace mounts (scope boundary, last).** Image
+  list → per-workspace podman pod; a container mounting multiple workspaces. Podman
+  pods only, no compose engine. Spike rootless-pod-on-tmpfs first.
+
+## Phased delivery (foundation — shipped)
 
 Ordered by importance to the structural foundation. Each phase is an independently
 testable deliverable (unit-testable with fakes; no drive/Podman needed until Phase 3).

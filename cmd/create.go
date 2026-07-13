@@ -21,6 +21,7 @@ var (
 	createVaultFlag string
 	createFromFlag  string
 	createImageFlag string
+	createMountFlag string
 )
 
 var createCmd = &cobra.Command{
@@ -89,7 +90,11 @@ image run host-only).`,
 			return err
 		}
 
-		idx.Workspaces = append(idx.Workspaces, domain.IndexWorkspace{Name: name, Root: root, Image: image})
+		entry := domain.IndexWorkspace{Name: name, Root: root, Mount: createMountFlag}
+		if image != "" {
+			entry.Images = []string{image}
+		}
+		idx.Workspaces = append(idx.Workspaces, entry)
 		vault.Bump(idx)
 		if err := vault.WriteIndex(target.Path, idx); err != nil {
 			return err
@@ -129,7 +134,7 @@ func seedFrom(ctx context.Context, g *git.Git, ref, defaultVault, content string
 	if err := g.Clone(ctx, filepath.Join(src.Path, entry.Root), content); err != nil {
 		return "", err
 	}
-	return entry.Image, os.RemoveAll(filepath.Join(content, ".git"))
+	return entry.PrimaryImage(), os.RemoveAll(filepath.Join(content, ".git"))
 }
 
 // parseWorkspaceRef splits "vault/workspace" or "workspace" into its parts.
@@ -143,6 +148,7 @@ func parseWorkspaceRef(ref, defaultVault string) (vaultName, wsName string) {
 func init() {
 	createCmd.Flags().StringVar(&createVaultFlag, "vault", "", "target vault (default: configured default vault)")
 	createCmd.Flags().StringVar(&createFromFlag, "from", "", "seed from an existing workspace (<vault>/<workspace> or <workspace>)")
-	createCmd.Flags().StringVar(&createImageFlag, "image", "", "container image the workspace runs inside (default: host-only)")
+	createCmd.Flags().StringVar(&createImageFlag, "image", "", "vault image the workspace runs inside (default: host-only)")
+	createCmd.Flags().StringVar(&createMountFlag, "mount", "", "where the workspace mounts inside the container (default: /workspace)")
 	rootCmd.AddCommand(createCmd)
 }

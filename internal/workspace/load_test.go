@@ -142,13 +142,20 @@ func (f *fakeSessions) Ensure(_, dir string, command []string) error {
 
 type fakeRuntime struct {
 	available bool
-	started   []string
+	ensured   []string // image refs loaded into the store
+	started   []string // image refs run as the primary container
+	mount     string
 	id        string
 }
 
 func (f *fakeRuntime) Available() bool { return f.available }
-func (f *fakeRuntime) Start(_ context.Context, image, _, _ string) (string, error) {
+func (f *fakeRuntime) EnsureImage(_ context.Context, ref, _ string, _ bool) error {
+	f.ensured = append(f.ensured, ref)
+	return nil
+}
+func (f *fakeRuntime) Start(_ context.Context, image, _, _, mountTarget string) (string, error) {
 	f.started = append(f.started, image)
+	f.mount = mountTarget
 	return f.id, nil
 }
 func (f *fakeRuntime) ExecArgs(id string) []string {
@@ -163,7 +170,7 @@ func setImage(t *testing.T, vaultPath, ws, image string) {
 	}
 	for i := range idx.Workspaces {
 		if idx.Workspaces[i].Name == ws {
-			idx.Workspaces[i].Image = image
+			idx.Workspaces[i].Images = []string{image}
 		}
 	}
 	if err := vault.WriteIndex(vaultPath, idx); err != nil {
@@ -186,7 +193,7 @@ func TestLoad_StartsSessionAtWorkspaceRoot(t *testing.T) {
 
 func TestLoad_StartsContainerWhenImageDeclared(t *testing.T) {
 	loader, v, _ := testEnv(t)
-	setImage(t, v.Path, "app", "localhost/arch-minimal")
+	setImage(t, v.Path, "app", "arch-go")
 	rt := &fakeRuntime{available: true, id: "cid123"}
 	loader.Runtime = rt
 	sess := &fakeSessions{}
@@ -196,8 +203,12 @@ func TestLoad_StartsContainerWhenImageDeclared(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rt.started) != 1 || rt.started[0] != "localhost/arch-minimal" {
-		t.Errorf("container not started: %v", rt.started)
+	ref := vault.ImageRef("arch-go")
+	if len(rt.ensured) != 1 || rt.ensured[0] != ref {
+		t.Errorf("image not loaded into store: %v", rt.ensured)
+	}
+	if len(rt.started) != 1 || rt.started[0] != ref {
+		t.Errorf("container not started with image ref: %v", rt.started)
 	}
 	if ws.ContainerID != "cid123" {
 		t.Errorf("container id not recorded: %q", ws.ContainerID)

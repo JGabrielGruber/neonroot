@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -51,9 +52,9 @@ var listCmd = &cobra.Command{
 				if workspace.IsLoaded(app.Paths, w.Name) {
 					state = "loaded"
 				}
-				image := w.Image
-				if image == "" {
-					image = "-"
+				image := "-"
+				if len(w.Images) > 0 {
+					image = strings.Join(w.Images, ",")
 				}
 				fmt.Fprintf(out, "%-14s %-10s %-9s %s\n", w.Name, r.Name, state, image)
 				rows++

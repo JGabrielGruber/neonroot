@@ -99,16 +99,56 @@ func (p *Podman) Stop(ctx context.Context, id string) error {
 }
 
 // Start launches a long-lived detached container for a workspace (kept alive
-// with `sleep infinity`) with the tmpfs workspace bind-mounted at /workspace,
-// and returns its container ID. A session then execs a shell into it.
-func (p *Podman) Start(ctx context.Context, image, name, workspaceDir string) (string, error) {
+// with `sleep infinity`) with the tmpfs workspace bind-mounted at mountTarget
+// (defaults to /workspace), and returns its container ID. A session then execs a
+// shell into it.
+func (p *Podman) Start(ctx context.Context, image, name, workspaceDir, mountTarget string) (string, error) {
 	return p.Run(ctx, RunSpec{
 		Image:        image,
 		Name:         name,
 		WorkspaceDir: workspaceDir,
-		MountTarget:  "/workspace",
+		MountTarget:  mountTarget,
 		Command:      []string{"sleep", "infinity"},
 	})
+}
+
+// ImageExists reports whether an image reference is present in the tmpfs store.
+func (p *Podman) ImageExists(ctx context.Context, ref string) bool {
+	args := append(p.baseArgs(), "image", "exists", ref)
+	_, err := p.Runner.Run(ctx, "podman", args...)
+	return err == nil
+}
+
+// LoadImage loads a `podman save` tarball into the store. The tar is read
+// straight from the (mounted) vault path — it is never staged in tmpfs, so only
+// the unpacked layers occupy RAM.
+func (p *Podman) LoadImage(ctx context.Context, tarPath string) error {
+	args := append(p.baseArgs(), "load", "-i", tarPath)
+	_, err := p.Runner.Run(ctx, "podman", args...)
+	return err
+}
+
+// EnsureImage makes sure ref is in the store, loading it from tarPath if absent
+// (or always when reload is set).
+func (p *Podman) EnsureImage(ctx context.Context, ref, tarPath string, reload bool) error {
+	if !reload && p.ImageExists(ctx, ref) {
+		return nil
+	}
+	return p.LoadImage(ctx, tarPath)
+}
+
+// Build builds an image from a Containerfile directory and tags it ref.
+func (p *Podman) Build(ctx context.Context, ref, containerfileDir string) error {
+	args := append(p.baseArgs(), "build", "-t", ref, containerfileDir)
+	_, err := p.Runner.Run(ctx, "podman", args...)
+	return err
+}
+
+// Save writes an image's data to a tarball (podman save), for storage in a vault.
+func (p *Podman) Save(ctx context.Context, ref, tarPath string) error {
+	args := append(p.baseArgs(), "save", "-o", tarPath, ref)
+	_, err := p.Runner.Run(ctx, "podman", args...)
+	return err
 }
 
 // ExecArgs returns the full command (argv) to open an interactive shell inside a

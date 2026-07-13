@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/JGabrielGruber/neonroot/internal/platform/runnertest"
@@ -65,11 +66,11 @@ func TestPodman_RunBuildsArgs(t *testing.T) {
 func TestPodman_StartKeepsAlive(t *testing.T) {
 	rec := runnertest.New()
 	rec.Stdout["podman"] = "cid\n"
-	if _, err := newPodman(rec).Start(context.Background(), "img", "nr-app", "/tmp/nr/workspaces/app"); err != nil {
+	if _, err := newPodman(rec).Start(context.Background(), "img", "nr-app", "/tmp/nr/workspaces/app", "/code"); err != nil {
 		t.Fatal(err)
 	}
 	want := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers " +
-		"run -d --pull=never --name nr-app -v /tmp/nr/workspaces/app:/workspace -w /workspace img sleep infinity"
+		"run -d --pull=never --name nr-app -v /tmp/nr/workspaces/app:/code -w /code img sleep infinity"
 	if got := rec.Lines()[0]; got != want {
 		t.Errorf("start args:\n got %q\nwant %q", got, want)
 	}
@@ -84,6 +85,44 @@ func TestPodman_ExecArgs(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("ExecArgs[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestPodman_ImageOps(t *testing.T) {
+	rec := runnertest.New()
+	p := newPodman(rec)
+	ctx := context.Background()
+	if err := p.LoadImage(ctx, "/vault/images/x/image.tar"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Build(ctx, "localhost/neonroot-x:latest", "/vault/images/x"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Save(ctx, "localhost/neonroot-x:latest", "/vault/images/x/image.tar"); err != nil {
+		t.Fatal(err)
+	}
+	base := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers "
+	want := []string{
+		base + "load -i /vault/images/x/image.tar",
+		base + "build -t localhost/neonroot-x:latest /vault/images/x",
+		base + "save -o /vault/images/x/image.tar localhost/neonroot-x:latest",
+	}
+	for i, w := range want {
+		if rec.Lines()[i] != w {
+			t.Errorf("line %d:\n got %q\nwant %q", i, rec.Lines()[i], w)
+		}
+	}
+}
+
+func TestPodman_EnsureImage_SkipsWhenPresent(t *testing.T) {
+	rec := runnertest.New() // image exists -> no load
+	if err := newPodman(rec).EnsureImage(context.Background(), "ref", "/tar", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range rec.Lines() {
+		if strings.Contains(l, "load") {
+			t.Errorf("should not load when image present: %v", rec.Lines())
 		}
 	}
 }

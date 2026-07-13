@@ -30,7 +30,12 @@ type Sessions interface {
 // the runtime is unavailable) runs host-only.
 type Runtime interface {
 	Available() bool
-	Start(ctx context.Context, image, name, workspaceDir string) (string, error)
+	// EnsureImage makes sure ref is in the store, loading it from tarPath (on the
+	// vault) if absent, or always when reload is set.
+	EnsureImage(ctx context.Context, ref, tarPath string, reload bool) error
+	// Start launches the primary container with the workspace bind-mounted at
+	// mountTarget (empty = default) and returns its ID.
+	Start(ctx context.Context, image, name, workspaceDir, mountTarget string) (string, error)
 	ExecArgs(containerID string) []string
 }
 
@@ -56,6 +61,8 @@ type Loader struct {
 	// Clean discards an already-loaded clone (uncommitted work included) and
 	// re-clones fresh. Without it, an already-loaded workspace is reused.
 	Clean bool
+	// ReloadImage re-loads image data from the vault even if already in the store.
+	ReloadImage bool
 }
 
 // Load clones the named workspace from vault v into tmpfs and records its state.
@@ -122,7 +129,7 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 		SourceVault: v.Name,
 		Root:        dst,
 		HydratedAt:  time.Now().UTC().Format(time.RFC3339),
-		Image:       entry.Image,
+		Images:      entry.Images,
 	}
 	if err := WriteState(l.Paths, ws); err != nil {
 		return nil, err
@@ -131,10 +138,8 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 	// Optionally start a container for a workspace that declares an image; the
 	// session then execs a shell inside it. Any failure degrades to host-only.
 	var command []string
-	if entry.Image != "" && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
-		l.UI.Step(fmt.Sprintf("starting container (%s)", entry.Image))
-		cid, err := l.Runtime.Start(ctx, entry.Image, containerName(name), dst)
-		if err != nil {
+	if len(entry.Images) > 0 && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
+		if cid, err := l.startContainer(ctx, v, entry, name, dst); err != nil {
 			l.UI.Warn(fmt.Sprintf("container not started (host-only): %v", err))
 		} else {
 			ws.ContainerID = cid
@@ -152,6 +157,24 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 		}
 	}
 	return ws, nil
+}
+
+// startContainer ensures the workspace's image data is loaded into the tmpfs
+// store (from the vault, offline) and starts its primary container with the
+// workspace bind-mounted at the configured target. Sidecar images (the rest of
+// the list) are loaded too but only run as a pod in a later phase.
+func (l *Loader) startContainer(ctx context.Context, v domain.Vault, entry domain.IndexWorkspace, name, dst string) (string, error) {
+	for _, img := range entry.Images {
+		l.UI.Step(fmt.Sprintf("loading image %q", img))
+		ref := vault.ImageRef(img)
+		tar := vault.ImageTarPath(v.Path, img)
+		if err := l.Runtime.EnsureImage(ctx, ref, tar, l.ReloadImage); err != nil {
+			return "", err
+		}
+	}
+	primary := entry.PrimaryImage()
+	l.UI.Step(fmt.Sprintf("starting container (%s)", primary))
+	return l.Runtime.Start(ctx, vault.ImageRef(primary), containerName(name), dst, entry.Mount)
 }
 
 // containerName derives a stable container name from a workspace name, matching

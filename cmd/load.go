@@ -15,6 +15,7 @@ var (
 	loadNoSession   bool
 	loadNoContainer bool
 	loadClean       bool
+	loadReloadImage bool
 )
 
 var loadCmd = &cobra.Command{
@@ -46,6 +47,7 @@ already-loaded workspace is reused; --clean re-clones fresh.`,
 			Git:         &git.Git{Runner: app.Runner},
 			NoContainer: loadNoContainer,
 			Clean:       loadClean,
+			ReloadImage: loadReloadImage,
 		}
 		if !loadNoSession {
 			tmux := &session.Tmux{Runner: app.Runner}
@@ -81,5 +83,6 @@ func init() {
 	loadCmd.Flags().BoolVar(&loadNoSession, "no-session", false, "do not start a tmux session")
 	loadCmd.Flags().BoolVar(&loadNoContainer, "no-container", false, "run host-only even if the workspace declares an image")
 	loadCmd.Flags().BoolVar(&loadClean, "clean", false, "discard an already-loaded copy and re-clone fresh")
+	loadCmd.Flags().BoolVar(&loadReloadImage, "reload-image", false, "re-load image data from the vault even if already in the store")
 	rootCmd.AddCommand(loadCmd)
 }

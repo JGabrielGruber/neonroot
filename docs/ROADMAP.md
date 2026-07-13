@@ -160,10 +160,15 @@ available.
   `--as <name>` (push to a new branch — no conflict), and `--force` (mapped to
   `git push --force-with-lease`, which still refuses a concurrent writer).
   Verified with real git.
-- **Phase F — Image data in the vault.** `images/<name>/{Containerfile,image.tar}`;
-  `load` does `podman load` **straight from the drive** (tar never staged in RAM).
-  Image reference modeled as a **list** from the start; `image build` producer;
-  configurable container mount target.
+- **Phase F — Image data in the vault.** ✅ **Done.** Images live at
+  `images/<name>/{Containerfile,image.tar}`. `image create` scaffolds a
+  Containerfile (embedded template); `image build` does `podman build` + `podman
+  save` into the vault. `load` runs `podman load -i` **straight from the drive**
+  (tar never staged in RAM), reuse-if-present with `--reload-image`. Image
+  reference is a **list** (`Images []string`, primary + future sidecars);
+  per-workspace **mount target** (`--mount`). Verified end-to-end with real
+  podman: build→store→create→load→run with a custom mount, and the offline
+  path (image removed from store → re-loaded from the vault tar → runs).
 - **Phase G — Command split + reuse flags.** `neonroot image …` subtree; formalize
   `--clean`/`--reload-image`; explicit `image rm` (never a side effect of `stop`).
 - **Phase H — Snapshots.** Workspace = git tag/branch; image = `podman commit`→

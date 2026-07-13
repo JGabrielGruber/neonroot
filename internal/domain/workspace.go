@@ -14,9 +14,9 @@ type Workspace struct {
 	Root string `toml:"root"`
 	// HydratedAt is an RFC3339 timestamp of when Load completed.
 	HydratedAt string `toml:"hydrated_at"`
-	// Image is the container image the workspace runs inside, if any.
-	Image string `toml:"image,omitempty"`
-	// ContainerID is the running container backing this workspace, if started.
+	// Images are the container images the workspace runs inside, if any.
+	Images []string `toml:"images,omitempty"`
+	// ContainerID is the running (primary) container backing this workspace.
 	ContainerID string `toml:"container_id,omitempty"`
 }
 

@@ -58,7 +58,20 @@ type IndexWorkspace struct {
 	Name string `toml:"name"`
 	// Root is the workspace directory relative to the vault Path.
 	Root string `toml:"root"`
-	// Image is an optional container image the workspace runs inside. Empty
-	// means host-only (no container) — a fully supported mode.
-	Image string `toml:"image,omitempty"`
+	// Images are the container images the workspace runs inside. Empty means
+	// host-only (no container) — a fully supported mode. The first is the
+	// primary (where the shell attaches); the rest are sidecars (run in a pod).
+	Images []string `toml:"images,omitempty"`
+	// Mount is where the workspace is bind-mounted inside its container.
+	// Defaults to /workspace when empty.
+	Mount string `toml:"mount,omitempty"`
+}
+
+// PrimaryImage returns the image the workspace's shell runs in, or "" for
+// host-only.
+func (w IndexWorkspace) PrimaryImage() string {
+	if len(w.Images) == 0 {
+		return ""
+	}
+	return w.Images[0]
 }

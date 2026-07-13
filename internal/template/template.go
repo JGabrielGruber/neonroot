@@ -13,10 +13,27 @@ import (
 
 // The `all:` prefix is required so dotfiles like .gitignore are embedded.
 //
-//go:embed all:files/default
-var defaultFS embed.FS
+//go:embed all:files
+var files embed.FS
 
 const defaultRoot = "files/default"
+
+// defaultFS aliases the embedded tree for the default-workspace walk.
+var defaultFS = files
+
+// WriteImageContainerfile writes the shipped default Containerfile to dst,
+// substituting {{image}} with the image name.
+func WriteImageContainerfile(dst, name string) error {
+	data, err := files.ReadFile("files/image/Containerfile")
+	if err != nil {
+		return err
+	}
+	data = []byte(strings.ReplaceAll(string(data), "{{image}}", name))
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0o644)
+}
 
 // WriteDefault writes the shipped default template into dstDir, substituting
 // the {{workspace}} placeholder with name in file contents.

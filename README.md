@@ -16,7 +16,7 @@ drive when you choose. It never writes to the SD card it boots from.
 | `status`   | ✅ working | Show repos, availability, and contents |
 | `create`   | ✅ working | Create a new empty workspace in a repo |
 | `repo add` | ✅ working | Register a repo path in config |
-| `load`     | 🚧 Phase 2 | Hydrate a workspace from a repo into tmpfs |
+| `load`     | ✅ working | Hydrate a workspace from a repo into tmpfs |
 | `commit`   | 🚧 Phase 4 | Write workspace changes back to a repo |
 
 Global flags: `--quiet`/`-q` (warnings only), `--plain` (no color).

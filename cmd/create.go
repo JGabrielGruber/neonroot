@@ -34,7 +34,7 @@ var createCmd = &cobra.Command{
 		}
 
 		// Serialize index mutation against other neonroot processes.
-		lock, err := app.lockRepo(r.Name)
+		lock, err := app.lock("repo-" + r.Name)
 		if err != nil {
 			return err
 		}

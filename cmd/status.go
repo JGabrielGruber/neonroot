@@ -10,6 +10,7 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 	"github.com/JGabrielGruber/neonroot/internal/repo"
+	"github.com/JGabrielGruber/neonroot/internal/workspace"
 )
 
 var statusCmd = &cobra.Command{
@@ -43,7 +44,18 @@ var statusCmd = &cobra.Command{
 				fmt.Fprintf(out, "      - %s\n", w.Name)
 			}
 		}
-		// Loaded-workspace diff status lands in Phase 4.
+		// Currently loaded (hydrated) workspaces.
+		loaded, err := workspace.List(app.Paths)
+		if err != nil {
+			return err
+		}
+		if len(loaded) > 0 {
+			fmt.Fprintf(out, "\nloaded workspaces (in tmpfs):\n")
+			for _, w := range loaded {
+				fmt.Fprintf(out, "  %-12s from %-10s %s\n", w.Name, w.SourceRepo, w.Root)
+			}
+		}
+		// Per-workspace change diff lands in Phase 4.
 		return nil
 	},
 }

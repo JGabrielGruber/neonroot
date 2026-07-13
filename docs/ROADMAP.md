@@ -122,9 +122,13 @@ testable deliverable (unit-testable with fakes; no drive/Podman needed until Pha
   `Bump`. `list` shows availability, `status` shows repo contents, `create`
   initializes a repo + adds a workspace (flock-guarded), `repo add` registers a
   repo path in config. Clean `ErrRepoUnavailable`/`ErrRepoNotFound` exit codes.
-- **Phase 2 — Hydration.** `internal/hydration`: copy→tmpfs with per-file progress,
-  build manifest, statfs pre-flight. `internal/workspace.Load` orchestrates. `load`
-  fully works.
+- **Phase 2 — Hydration.** ✅ **Done.** `internal/hydration`: statfs pre-flight,
+  walk-copy repo→tmpfs preserving mode/mtime, single-read fnv64 content hashing,
+  per-byte progress via `ui.Reporter`, symlink handling, atomic manifest I/O.
+  `internal/workspace`: `Loader.Load` orchestrates (availability → index lookup →
+  double-load guard → hydrate → persist manifest + state with source fingerprint,
+  rollback on failure) plus loaded-workspace tracking. `load` works; `status`
+  lists loaded workspaces. Verified: load → unplug → workspace still usable.
 - **Phase 3 — Session & runtime.** `internal/session` (tmux) + `internal/runtime`
   (podman) interfaces + fakes + exec impls; Podman graphroot→tmpfs; wire session
   into `load`. **Flag:** validate graphroot-on-tmpfs on the real Arch image.

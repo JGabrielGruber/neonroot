@@ -107,14 +107,15 @@ func (a *App) resolveRepo(name string) (domain.Repo, error) {
 	return r, nil
 }
 
-// lockRepo takes a non-blocking advisory lock guarding mutations to a repo,
-// scoped by repo name and held under the runtime tmpfs (never the card).
-func (a *App) lockRepo(name string) (*platform.FileLock, error) {
+// lock takes a non-blocking advisory lock under the runtime tmpfs (never the
+// card), scoped by key. Callers namespace keys (e.g. "repo-ext", "ws-webapp")
+// so repo and workspace locks never collide.
+func (a *App) lock(key string) (*platform.FileLock, error) {
 	dir := filepath.Join(a.Paths.Runtime, "locks")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	return platform.TryLock(filepath.Join(dir, name+".lock"))
+	return platform.TryLock(filepath.Join(dir, key+".lock"))
 }
 
 // Execute runs the CLI, rendering sentinel errors with clear messages and

@@ -100,9 +100,20 @@ func (p Paths) EnsureRuntimeDirs() error {
 	return nil
 }
 
+// WorkspaceStateDir returns the tmpfs directory holding a loaded workspace's
+// bookkeeping (manifest + state), separate from the hydrated payload itself.
+func (p Paths) WorkspaceStateDir(workspace string) string {
+	return filepath.Join(p.Runtime, "workspaces", workspace)
+}
+
 // ManifestPath returns the tmpfs location of a workspace's load-time manifest.
 func (p Paths) ManifestPath(workspace string) string {
-	return filepath.Join(p.Runtime, "workspaces", workspace, "manifest.toml")
+	return filepath.Join(p.WorkspaceStateDir(workspace), "manifest.toml")
+}
+
+// StatePath returns the tmpfs location of a loaded workspace's state record.
+func (p Paths) StatePath(workspace string) string {
+	return filepath.Join(p.WorkspaceStateDir(workspace), "workspace.toml")
 }
 
 // WorkspaceRoot returns the tmpfs directory a workspace hydrates into.

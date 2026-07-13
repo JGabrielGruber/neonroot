@@ -14,9 +14,11 @@ import (
 var attachCmd = &cobra.Command{
 	Use:   "attach <workspace>",
 	Short: "Attach to a loaded workspace's session",
-	Long: `Attaches to the workspace's tmux session, recreating it if it's gone (e.g.
-after you exited the shell with Ctrl-D). The workspace and its container persist
-until 'neonroot stop', so you can always get back in.`,
+	Long: `Attaches to the workspace's session. For a containerized workspace it
+execs into the container (opening its tmux, so session saving works); for a
+host-only workspace it attaches host tmux, recreating it if you had exited it.
+The workspace and its container persist until 'neonroot stop', so you can always
+get back in.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
@@ -26,28 +28,31 @@ until 'neonroot stop', so you can always get back in.`,
 		if err != nil {
 			return err
 		}
-		tmuxPath, err := app.Runner.LookPath("tmux")
-		if err != nil {
-			return fmt.Errorf("tmux not found on PATH: %w", err)
-		}
 
-		// Recreate the session if it exited. The container (started with
-		// `sleep infinity`) is still alive, so we just re-exec a shell into it;
-		// a host-only workspace gets a fresh shell in its directory.
-		var command []string
+		// Containerized: exec straight into the still-running container. Its tmux
+		// (via the default shell) is the durable session — no host tmux nesting.
 		if ws.ContainerID != "" {
+			podmanPath, err := app.Runner.LookPath("podman")
+			if err != nil {
+				return fmt.Errorf("podman not found on PATH: %w", err)
+			}
 			pod, err := app.podman()
 			if err != nil {
 				return err
 			}
-			command = pod.ExecArgs(ws.ContainerID)
-		}
-		tmux := &session.Tmux{Runner: app.Runner}
-		if err := tmux.Ensure(name, ws.Root, command); err != nil {
-			return err
+			argv := pod.ExecArgs(ws.ContainerID, ws.Shell)
+			return syscall.Exec(podmanPath, argv, os.Environ())
 		}
 
-		// Hand the terminal fully over to tmux by replacing this process.
+		// Host-only: recreate the host tmux session if it exited, then attach.
+		tmuxPath, err := app.Runner.LookPath("tmux")
+		if err != nil {
+			return fmt.Errorf("tmux not found on PATH: %w", err)
+		}
+		tmux := &session.Tmux{Runner: app.Runner}
+		if err := tmux.Ensure(name, ws.Root, nil); err != nil {
+			return err
+		}
 		argv := append([]string{"tmux"}, session.AttachArgs(name)...)
 		return syscall.Exec(tmuxPath, argv, os.Environ())
 	},

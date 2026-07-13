@@ -23,7 +23,17 @@ var (
 	createImageFlag    string
 	createMountFlag    string
 	createTemplateFlag string
+	createShellFlag    string
 )
+
+// shellCommand turns a user-supplied shell string into a container command
+// (run via `sh -c`), or nil to use the default (tmux if present, else bash).
+func shellCommand(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return []string{"sh", "-c", s}
+}
 
 var createCmd = &cobra.Command{
 	Use:   "create <workspace>",
@@ -94,7 +104,7 @@ image run host-only).`,
 			return err
 		}
 
-		entry := domain.IndexWorkspace{Name: name, Root: root, Mount: createMountFlag}
+		entry := domain.IndexWorkspace{Name: name, Root: root, Mount: createMountFlag, Shell: shellCommand(createShellFlag)}
 		if image != "" {
 			entry.Images = []string{image}
 		}
@@ -155,5 +165,6 @@ func init() {
 	createCmd.Flags().StringVar(&createImageFlag, "image", "", "vault image the workspace runs inside (default: host-only)")
 	createCmd.Flags().StringVar(&createMountFlag, "mount", "", "where the workspace mounts inside the container (default: /workspace)")
 	createCmd.Flags().StringVar(&createTemplateFlag, "template", "default", "starter template (see 'neonroot template ls')")
+	createCmd.Flags().StringVar(&createShellFlag, "shell", "", "command to run on attach into the container (default: tmux, else bash)")
 	rootCmd.AddCommand(createCmd)
 }

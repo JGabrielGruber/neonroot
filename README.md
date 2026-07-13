@@ -25,12 +25,16 @@ Workspace commands (the everyday surface):
 | `commit <name>` | `git commit` + `git push` back (refuses on conflict; `--rebase`/`--as`/`--force`) |
 | `status [name]` | Vault overview, or a workspace's live git state (dirty/ahead/behind) |
 | `snapshot <name> <label>` | Tag a durable point-in-time copy of the workspace |
-| `set <name> [flags]` | Edit attributes — `--rename`, `--image`, `--add-image`, `--remove-image`, `--mount`, `--no-image` |
+| `set <name> [flags]` | Edit attributes — `--rename`, `--image`, `--add-image`, `--remove-image`, `--mount`, `--shell`, `--no-image` |
 | `stop <name>`   | Stop the container/pod + session and drop the tmpfs copy |
 | `rm <name>`     | Delete a workspace from its vault (stop it first) |
 
-Attaching recreates the session if you exited it (Ctrl-D) — the container keeps
-running until `stop`, so you can always `attach` back in.
+Sessions: a **containerized** workspace's `attach` execs straight into the
+container, opening its **tmux** by default (so in-container session saving works,
+e.g. resurrect/continuum) — falling back to bash/sh if tmux isn't installed.
+Override per workspace with `create/set --shell "<cmd>"`. A **host-only**
+workspace uses host tmux, recreated if you exited it (Ctrl-D). Either way the
+workspace/container persists until `stop`, so you can always `attach` back in.
 
 Image management (`neonroot image …`):
 

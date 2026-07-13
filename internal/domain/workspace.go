@@ -21,6 +21,9 @@ type Workspace struct {
 	// Pod is the podman pod name when the workspace runs multiple images
 	// (primary + sidecars); empty for a single container or host-only.
 	Pod string `toml:"pod,omitempty"`
+	// Shell is the command to run when attaching into the container. Empty uses
+	// the default (tmux if present, else bash).
+	Shell []string `toml:"shell,omitempty"`
 }
 
 // Fingerprint is a cheap identity of a vault index's state at a point in time,

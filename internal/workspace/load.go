@@ -39,7 +39,6 @@ type Runtime interface {
 	// StartPod launches a pod: the primary image (refs[0]) with the workspace
 	// mounted, plus sidecars sharing the network. Returns the primary's ID.
 	StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string) (string, error)
-	ExecArgs(containerID string) []string
 }
 
 // Git is the version-control capability Load uses to clone a workspace's bare
@@ -133,14 +132,18 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 		Root:        dst,
 		HydratedAt:  time.Now().UTC().Format(time.RFC3339),
 		Images:      entry.Images,
+		Shell:       entry.Shell,
 	}
 	if err := WriteState(l.Paths, ws); err != nil {
 		return nil, err
 	}
 
-	// Optionally start a container for a workspace that declares an image; the
-	// session then execs a shell inside it. Any failure degrades to host-only.
-	var command []string
+	// Start a container for a workspace that declares an image. When one runs,
+	// the session lives *inside* it (attach execs into the container, defaulting
+	// to its tmux) — no host tmux, so container-side session saving just works.
+	// If there's no container (host-only, or the container failed), fall back to
+	// a host tmux session.
+	containerized := false
 	if len(entry.Images) > 0 && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
 		if cid, err := l.startContainer(ctx, v, entry, name, dst); err != nil {
 			l.UI.Warn(fmt.Sprintf("container not started (host-only): %v", err))
@@ -149,16 +152,16 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 			if len(entry.Images) > 1 {
 				ws.Pod = containerName(name)
 			}
-			command = l.Runtime.ExecArgs(cid)
 			if err := WriteState(l.Paths, ws); err != nil {
 				return nil, err
 			}
+			containerized = true
 		}
 	}
 
-	if l.Sessions != nil {
+	if !containerized && l.Sessions != nil {
 		l.UI.Step("starting session")
-		if err := l.Sessions.Ensure(name, dst, command); err != nil {
+		if err := l.Sessions.Ensure(name, dst, nil); err != nil {
 			l.UI.Warn(fmt.Sprintf("session not started (workspace is still loaded): %v", err))
 		}
 	}

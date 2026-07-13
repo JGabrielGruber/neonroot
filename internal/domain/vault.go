@@ -65,6 +65,9 @@ type IndexWorkspace struct {
 	// Mount is where the workspace is bind-mounted inside its container.
 	// Defaults to /workspace when empty.
 	Mount string `toml:"mount,omitempty"`
+	// Shell is the command run when attaching into the container. Empty uses the
+	// default (tmux if present, else bash).
+	Shell []string `toml:"shell,omitempty"`
 }
 
 // PrimaryImage returns the image the workspace's shell runs in, or "" for

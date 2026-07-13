@@ -163,9 +163,6 @@ func (f *fakeRuntime) StartPod(_ context.Context, _ string, refs []string, _, _,
 	f.mount = mountTarget
 	return f.id, nil
 }
-func (f *fakeRuntime) ExecArgs(id string) []string {
-	return []string{"podman", "exec", "-it", id, "/bin/bash"}
-}
 
 func setImage(t *testing.T, vaultPath, ws, image string) {
 	t.Helper()
@@ -218,8 +215,10 @@ func TestLoad_StartsContainerWhenImageDeclared(t *testing.T) {
 	if ws.ContainerID != "cid123" {
 		t.Errorf("container id not recorded: %q", ws.ContainerID)
 	}
-	if len(sess.command) == 0 || sess.command[0] != "podman" {
-		t.Errorf("session should exec into container, got %v", sess.command)
+	// A containerized workspace must NOT start a host tmux session — attach
+	// execs into the container instead.
+	if sess.dir != "" {
+		t.Errorf("containerized load should not start a host session, got dir %q", sess.dir)
 	}
 }
 

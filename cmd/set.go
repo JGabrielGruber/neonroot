@@ -19,6 +19,7 @@ var (
 	setAddImageFlag    string
 	setRemoveImageFlag string
 	setMountFlag       string
+	setShellFlag       string
 	setNoImageFlag     bool
 )
 
@@ -100,6 +101,9 @@ requires the workspace to be stopped first.`,
 		if f.Changed("mount") {
 			entry.Mount = setMountFlag
 		}
+		if f.Changed("shell") {
+			entry.Shell = shellCommand(setShellFlag)
+		}
 
 		idx.Workspaces[pos] = entry
 		vault.Bump(idx)
@@ -123,6 +127,7 @@ func init() {
 	f.StringVar(&setAddImageFlag, "add-image", "", "add a sidecar image")
 	f.StringVar(&setRemoveImageFlag, "remove-image", "", "remove an image from the list")
 	f.StringVar(&setMountFlag, "mount", "", "set the container mount target")
+	f.StringVar(&setShellFlag, "shell", "", "command to run on attach (empty resets to default: tmux, else bash)")
 	f.BoolVar(&setNoImageFlag, "no-image", false, "make the workspace host-only (clear its images)")
 	rootCmd.AddCommand(setCmd)
 }

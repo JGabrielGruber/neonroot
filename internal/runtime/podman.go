@@ -211,11 +211,22 @@ func (p *Podman) Save(ctx context.Context, ref, tarPath string) error {
 	return err
 }
 
-// ExecArgs returns the full command (argv) to open an interactive shell inside a
-// container. It carries the tmpfs storage roots so the container — which lives
-// in the tmpfs graphroot — is found. Callers run this as a session command.
-func (p *Podman) ExecArgs(id string) []string {
+// DefaultShell opens the container's tmux session (so continuum session-saving
+// works) when tmux is installed, and falls back to bash, then plain sh, so it
+// works in any image.
+var DefaultShell = []string{"sh", "-c",
+	"if command -v tmux >/dev/null 2>&1; then exec tmux new-session -A -s neonroot; " +
+		"elif command -v bash >/dev/null 2>&1; then exec bash -l; else exec sh; fi"}
+
+// ExecArgs returns the full command (argv) to open an interactive session inside
+// a container. command overrides the shell (empty uses DefaultShell). It carries
+// the tmpfs storage roots so the container in the tmpfs graphroot is found.
+func (p *Podman) ExecArgs(id string, command []string) []string {
+	if len(command) == 0 {
+		command = DefaultShell
+	}
 	argv := []string{"podman"}
 	argv = append(argv, p.baseArgs()...)
-	return append(argv, "exec", "-it", id, "/bin/bash")
+	argv = append(argv, "exec", "-it", id)
+	return append(argv, command...)
 }

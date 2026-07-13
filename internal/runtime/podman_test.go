@@ -77,11 +77,21 @@ func TestPodman_StartKeepsAlive(t *testing.T) {
 }
 
 func TestPodman_ExecArgs(t *testing.T) {
-	got := newPodman(runnertest.New()).ExecArgs("cid")
-	want := []string{"podman", "--root", "/tmp/nr/containers", "--runroot", "/run/user/1000/nr/containers", "exec", "-it", "cid", "/bin/bash"}
-	if len(got) != len(want) {
-		t.Fatalf("ExecArgs = %v, want %v", got, want)
+	p := newPodman(runnertest.New())
+	base := []string{"podman", "--root", "/tmp/nr/containers", "--runroot", "/run/user/1000/nr/containers", "exec", "-it", "cid"}
+
+	// Default: the tmux-preferring shell.
+	got := p.ExecArgs("cid", nil)
+	if len(got) != len(base)+len(DefaultShell) {
+		t.Fatalf("default ExecArgs = %v", got)
 	}
+	if got[len(got)-1] != DefaultShell[len(DefaultShell)-1] {
+		t.Errorf("default should end with the shell command, got %v", got)
+	}
+
+	// Explicit command overrides.
+	got = p.ExecArgs("cid", []string{"bash"})
+	want := append(append([]string{}, base...), "bash")
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("ExecArgs[%d] = %q, want %q", i, got[i], want[i])

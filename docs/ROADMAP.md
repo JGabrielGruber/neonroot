@@ -169,8 +169,11 @@ available.
   per-workspace **mount target** (`--mount`). Verified end-to-end with real
   podman: build→store→create→load→run with a custom mount, and the offline
   path (image removed from store → re-loaded from the vault tar → runs).
-- **Phase G — Command split + reuse flags.** `neonroot image …` subtree; formalize
-  `--clean`/`--reload-image`; explicit `image rm` (never a side effect of `stop`).
+- **Phase G — Command split + reuse flags.** ✅ **Done.** `neonroot image …`
+  subtree: `create`/`build` (F) + `ls` (name/built/size) + `rm` (deletes
+  definition + data from the vault and the tmpfs store; warns about referencing
+  workspaces — never a side effect of `stop`). `--clean`/`--reload-image` on load
+  formalized. Image `snapshot` lands in H.
 - **Phase H — Snapshots.** Workspace = git tag/branch; image = `podman commit`→
   `save`→store (captures inside-container changes).
 - **Phase I — Sidecars/pods + multi-workspace mounts (scope boundary, last).** Image

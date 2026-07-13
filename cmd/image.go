@@ -3,9 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
+	"github.com/JGabrielGruber/neonroot/internal/runtime"
 	"github.com/JGabrielGruber/neonroot/internal/template"
 	"github.com/JGabrielGruber/neonroot/internal/vault"
 )
@@ -94,10 +96,96 @@ saves the result as image.tar in the vault, so a later load can run it offline.`
 	},
 }
 
+var imageLsCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "List images stored in a vault",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		v, err := app.resolveVault(imageVaultFlag)
+		if err != nil {
+			return err
+		}
+		if err := app.requireAvailable(v); err != nil {
+			return err
+		}
+		entries, err := os.ReadDir(filepath.Join(v.Path, "images"))
+		if err != nil {
+			if os.IsNotExist(err) {
+				app.UI.Info("no images in this vault")
+				return nil
+			}
+			return err
+		}
+		out := cmd.OutOrStdout()
+		fmt.Fprintf(out, "%-16s %-8s %s\n", "IMAGE", "BUILT", "SIZE")
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			built, size := "no", "-"
+			if info, err := os.Stat(vault.ImageTarPath(v.Path, e.Name())); err == nil {
+				built, size = "yes", humanSize(info.Size())
+			}
+			fmt.Fprintf(out, "%-16s %-8s %s\n", e.Name(), built, size)
+		}
+		return nil
+	},
+}
+
+var imageRmCmd = &cobra.Command{
+	Use:   "rm <name>",
+	Short: "Remove an image (definition + data) from a vault",
+	Long: `Deletes the image's Containerfile and image.tar from the vault, and its
+loaded copy from the tmpfs store. This is always explicit — stopping a workspace
+never removes a shared image.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+		v, err := app.resolveVault(imageVaultFlag)
+		if err != nil {
+			return err
+		}
+		if err := app.requireAvailable(v); err != nil {
+			return err
+		}
+		dir := vault.ImageDir(v.Path, name)
+		if _, err := os.Stat(dir); err != nil {
+			return fmt.Errorf("no image %q in vault %q", name, v.Name)
+		}
+
+		// Warn about workspaces that still reference it.
+		if idx, err := vault.ReadIndex(v.Path); err == nil {
+			for _, w := range idx.Workspaces {
+				for _, img := range w.Images {
+					if img == name {
+						app.UI.Warn(fmt.Sprintf("workspace %q still references image %q", w.Name, name))
+					}
+				}
+			}
+		}
+
+		if err := os.RemoveAll(dir); err != nil {
+			return err
+		}
+		// Best-effort removal from the tmpfs store.
+		if pod, err := app.podman(); err == nil && pod.Available() {
+			_, _ = app.Runner.Run(cmd.Context(), "podman",
+				append(podBaseArgs(pod), "rmi", "-f", vault.ImageRef(name))...)
+		}
+		app.UI.Success(fmt.Sprintf("removed image %q from vault %q", name, v.Name))
+		return nil
+	},
+}
+
+// podBaseArgs exposes the storage-pinning args for ad-hoc podman calls.
+func podBaseArgs(p *runtime.Podman) []string {
+	return []string{"--root", p.GraphRoot, "--runroot", p.RunRoot}
+}
+
 func init() {
-	for _, c := range []*cobra.Command{imageCreateCmd, imageBuildCmd} {
+	for _, c := range []*cobra.Command{imageCreateCmd, imageBuildCmd, imageLsCmd, imageRmCmd} {
 		c.Flags().StringVar(&imageVaultFlag, "vault", "", "vault holding the image (default: configured default vault)")
 	}
-	imageCmd.AddCommand(imageCreateCmd, imageBuildCmd)
+	imageCmd.AddCommand(imageCreateCmd, imageBuildCmd, imageLsCmd, imageRmCmd)
 	rootCmd.AddCommand(imageCmd)
 }

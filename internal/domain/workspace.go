@@ -15,6 +15,10 @@ type Workspace struct {
 	// SourceFingerprint captures the origin repo's state at load time so a
 	// later commit can detect whether cold storage changed underneath us.
 	SourceFingerprint Fingerprint `toml:"source_fingerprint"`
+	// Image is the container image the workspace runs inside, if any.
+	Image string `toml:"image,omitempty"`
+	// ContainerID is the running container backing this workspace, if started.
+	ContainerID string `toml:"container_id,omitempty"`
 }
 
 // Fingerprint is a cheap identity of a repo's state at a point in time. The

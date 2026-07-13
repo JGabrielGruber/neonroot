@@ -58,4 +58,7 @@ type IndexWorkspace struct {
 	Name string `toml:"name"`
 	// Root is the workspace directory relative to the repo Path.
 	Root string `toml:"root"`
+	// Image is an optional container image the workspace runs inside. Empty
+	// means host-only (no container) — a fully supported mode.
+	Image string `toml:"image,omitempty"`
 }

@@ -1,0 +1,5 @@
+# Build output and dependencies — kept out of cold storage by default.
+/node_modules/
+/target/
+/dist/
+/.venv/

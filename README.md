@@ -12,9 +12,9 @@ drive when you choose. It never writes to the SD card it boots from.
 
 | Command    | Status | Purpose |
 |------------|--------|---------|
-| `list`     | ✅ working | List repos with availability |
+| `list`     | ✅ working | List repos; `list workspaces` lists workspaces |
 | `status`   | ✅ working | Show repos, availability, and contents |
-| `create`   | ✅ working | Create a new empty workspace in a repo |
+| `create`   | ✅ working | Create a workspace (template or `--from`), optional `--image` |
 | `repo add` | ✅ working | Register a repo path in config |
 | `load`     | ✅ working | Hydrate a workspace into tmpfs + start a tmux session |
 | `attach`   | ✅ working | Attach to a loaded workspace's tmux session |

@@ -4,69 +4,129 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/JGabrielGruber/neonroot/internal/domain"
+	"github.com/JGabrielGruber/neonroot/internal/hydration"
 	"github.com/JGabrielGruber/neonroot/internal/repo"
+	"github.com/JGabrielGruber/neonroot/internal/template"
 )
 
-var createRepoFlag string
+var (
+	createRepoFlag  string
+	createFromFlag  string
+	createImageFlag string
+)
 
 var createCmd = &cobra.Command{
 	Use:   "create <workspace>",
-	Short: "Create a new empty workspace in a repo",
-	Args:  cobra.ExactArgs(1),
+	Short: "Create a new workspace in a repo",
+	Long: `Creates a workspace, seeded from the shipped default template or, with
+--from, by copying an existing workspace's files. Optionally binds it to a
+container image with --image (workspaces without an image run host-only).`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 
-		r, err := app.resolveRepo(createRepoFlag)
+		target, err := app.resolveRepo(createRepoFlag)
 		if err != nil {
 			return err
 		}
-		if state, err := repo.StateLive(r.Path); err != nil {
+		if err := app.requireAvailable(target); err != nil {
 			return err
-		} else if state != domain.RepoStateAvailable {
-			return fmt.Errorf("%w: %q at %s — plug in the drive and retry",
-				domain.ErrRepoUnavailable, r.Name, r.Path)
 		}
 
-		// Serialize index mutation against other neonroot processes.
-		lock, err := app.lock("repo-" + r.Name)
+		lock, err := app.lock("repo-" + target.Name)
 		if err != nil {
 			return err
 		}
 		defer lock.Unlock()
 
-		idx, err := repo.ReadIndex(r.Path)
+		idx, err := repo.ReadIndex(target.Path)
 		if errors.Is(err, fs.ErrNotExist) {
-			idx = repo.NewIndex() // first workspace initializes the repo
+			idx = repo.NewIndex()
 		} else if err != nil {
 			return err
 		}
-
 		if _, exists := repo.Workspace(idx, name); exists {
-			return fmt.Errorf("%w: %q in repo %q", domain.ErrWorkspaceExists, name, r.Name)
+			return fmt.Errorf("%w: %q in repo %q", domain.ErrWorkspaceExists, name, target.Name)
 		}
 
 		root := filepath.Join("workspaces", name)
-		if err := os.MkdirAll(filepath.Join(r.Path, root), 0o755); err != nil {
-			return err
+		dstDir := filepath.Join(target.Path, root)
+		image := createImageFlag
+
+		if createFromFlag != "" {
+			srcImage, err := seedFrom(createFromFlag, target.Name, name, dstDir)
+			if err != nil {
+				return err
+			}
+			if image == "" {
+				image = srcImage // inherit the source workspace's image
+			}
+		} else {
+			if err := template.WriteDefault(dstDir, name); err != nil {
+				return err
+			}
 		}
-		idx.Workspaces = append(idx.Workspaces, domain.IndexWorkspace{Name: name, Root: root})
+
+		idx.Workspaces = append(idx.Workspaces, domain.IndexWorkspace{Name: name, Root: root, Image: image})
 		repo.Bump(idx)
-		if err := repo.WriteIndex(r.Path, idx); err != nil {
+		if err := repo.WriteIndex(target.Path, idx); err != nil {
 			return err
 		}
 
-		app.UI.Success(fmt.Sprintf("created workspace %q in repo %q (revision %d)", name, r.Name, idx.Revision))
+		msg := fmt.Sprintf("created workspace %q in repo %q (revision %d)", name, target.Name, idx.Revision)
+		if image != "" {
+			msg += fmt.Sprintf(", image %q", image)
+		}
+		app.UI.Success(msg)
 		return nil
 	},
 }
 
+// seedFrom copies an existing workspace's files into dstDir and returns that
+// workspace's image (if any). ref is "<repo>/<workspace>" or "<workspace>"
+// (resolved against defaultRepo).
+func seedFrom(ref, defaultRepo, name, dstDir string) (string, error) {
+	repoName, wsName := parseWorkspaceRef(ref, defaultRepo)
+	src, err := app.resolveRepo(repoName)
+	if err != nil {
+		return "", err
+	}
+	if err := app.requireAvailable(src); err != nil {
+		return "", err
+	}
+	sidx, err := repo.ReadIndex(src.Path)
+	if err != nil {
+		return "", err
+	}
+	entry, ok := repo.Workspace(sidx, wsName)
+	if !ok {
+		return "", fmt.Errorf("%w: %q in repo %q", domain.ErrWorkspaceNotFound, wsName, src.Name)
+	}
+	srcDir := filepath.Join(src.Path, entry.Root)
+	// Reuse hydration's copy (progress + free-space pre-flight on the drive).
+	if _, err := hydration.Hydrate(name, srcDir, dstDir, app.UI); err != nil {
+		return "", err
+	}
+	return entry.Image, nil
+}
+
+// parseWorkspaceRef splits "repo/workspace" or "workspace" into its parts.
+func parseWorkspaceRef(ref, defaultRepo string) (repoName, wsName string) {
+	if i := strings.IndexByte(ref, '/'); i >= 0 {
+		return ref[:i], ref[i+1:]
+	}
+	return defaultRepo, ref
+}
+
 func init() {
 	createCmd.Flags().StringVarP(&createRepoFlag, "repo", "r", "", "target repo (default: configured default repo)")
+	createCmd.Flags().StringVar(&createFromFlag, "from", "", "seed from an existing workspace (<repo>/<workspace> or <workspace>)")
+	createCmd.Flags().StringVar(&createImageFlag, "image", "", "container image the workspace runs inside (default: host-only)")
 	rootCmd.AddCommand(createCmd)
 }

@@ -108,6 +108,20 @@ func (a *App) resolveRepo(name string) (domain.Repo, error) {
 	return r, nil
 }
 
+// requireAvailable returns ErrRepoUnavailable (with a plug-in hint) unless the
+// repo's backing drive is currently mounted.
+func (a *App) requireAvailable(r domain.Repo) error {
+	state, err := repo.StateLive(r.Path)
+	if err != nil {
+		return err
+	}
+	if state != domain.RepoStateAvailable {
+		return fmt.Errorf("%w: %q at %s — plug in the drive and retry",
+			domain.ErrRepoUnavailable, r.Name, r.Path)
+	}
+	return nil
+}
+
 // lock takes a non-blocking advisory lock under the runtime tmpfs (never the
 // card), scoped by key. Callers namespace keys (e.g. "repo-ext", "ws-webapp")
 // so repo and workspace locks never collide.

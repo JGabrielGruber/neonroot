@@ -7,7 +7,6 @@ import (
 
 	"github.com/JGabrielGruber/neonroot/internal/commit"
 	"github.com/JGabrielGruber/neonroot/internal/domain"
-	"github.com/JGabrielGruber/neonroot/internal/repo"
 	"github.com/JGabrielGruber/neonroot/internal/workspace"
 )
 
@@ -41,11 +40,8 @@ a new name, --repo to target a different repo, and --force to override.`,
 		if err != nil {
 			return err
 		}
-		if state, err := repo.StateLive(target.Path); err != nil {
+		if err := app.requireAvailable(target); err != nil {
 			return err
-		} else if state != domain.RepoStateAvailable {
-			return fmt.Errorf("%w: %q at %s — plug in the drive and retry",
-				domain.ErrRepoUnavailable, target.Name, target.Path)
 		}
 
 		lock, err := app.lock("repo-" + target.Name)

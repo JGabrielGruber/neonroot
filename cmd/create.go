@@ -1,18 +1,17 @@
 package cmd
 
-import (
-    "fmt"
-    "github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 var createCmd = &cobra.Command{
-    Use:   "create",
-    Short: "create a workspace",
-    Run: func(cmd *cobra.Command, args []string) {
-        fmt.Printf("create command - placeholder for v0.0.2\n")
-    },
+	Use:   "create <workspace>",
+	Short: "Create a new empty workspace in a repo",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		app.UI.Warn("create is not implemented yet (Phase 1: repo resolution)")
+		return nil
+	},
 }
 
 func init() {
-    rootCmd.AddCommand(createCmd)
+	rootCmd.AddCommand(createCmd)
 }

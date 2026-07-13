@@ -1,18 +1,17 @@
 package cmd
 
-import (
-    "fmt"
-    "github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 var commitCmd = &cobra.Command{
-    Use:   "commit",
-    Short: "commit a workspace",
-    Run: func(cmd *cobra.Command, args []string) {
-        fmt.Printf("commit command - placeholder for v0.0.2\n")
-    },
+	Use:   "commit <workspace>",
+	Short: "Write workspace changes back to a repo",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		app.UI.Warn("commit is not implemented yet (Phase 4: commit & dirty-tracking)")
+		return nil
+	},
 }
 
 func init() {
-    rootCmd.AddCommand(commitCmd)
+	rootCmd.AddCommand(commitCmd)
 }

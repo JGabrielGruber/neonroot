@@ -100,6 +100,12 @@ func (p Paths) EnsureRuntimeDirs() error {
 	return nil
 }
 
+// TemplatesDir is where user-defined workspace templates live, on the card
+// alongside config (small, rarely written).
+func (p Paths) TemplatesDir() string {
+	return filepath.Join(p.Config, "templates")
+}
+
 // WorkspaceStateDir returns the tmpfs directory holding a loaded workspace's
 // bookkeeping (state record), separate from the clone itself.
 func (p Paths) WorkspaceStateDir(workspace string) string {

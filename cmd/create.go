@@ -18,10 +18,11 @@ import (
 )
 
 var (
-	createVaultFlag string
-	createFromFlag  string
-	createImageFlag string
-	createMountFlag string
+	createVaultFlag    string
+	createFromFlag     string
+	createImageFlag    string
+	createMountFlag    string
+	createTemplateFlag string
 )
 
 var createCmd = &cobra.Command{
@@ -80,7 +81,10 @@ image run host-only).`,
 			if image == "" {
 				image = srcImage // inherit the source workspace's image
 			}
-		} else if err := template.WriteDefault(content, name); err != nil {
+		} else if err := template.Write(createTemplateFlag, app.Paths.TemplatesDir(), content, name); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("no template %q — see 'neonroot template ls'", createTemplateFlag)
+			}
 			return err
 		}
 
@@ -150,5 +154,6 @@ func init() {
 	createCmd.Flags().StringVar(&createFromFlag, "from", "", "seed from an existing workspace (<vault>/<workspace> or <workspace>)")
 	createCmd.Flags().StringVar(&createImageFlag, "image", "", "vault image the workspace runs inside (default: host-only)")
 	createCmd.Flags().StringVar(&createMountFlag, "mount", "", "where the workspace mounts inside the container (default: /workspace)")
+	createCmd.Flags().StringVar(&createTemplateFlag, "template", "default", "starter template (see 'neonroot template ls')")
 	rootCmd.AddCommand(createCmd)
 }

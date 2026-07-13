@@ -45,6 +45,20 @@ Image management (`neonroot image …`):
 A workspace with one image runs as a container; with several, as a podman pod
 (primary + sidecars sharing localhost).
 
+Templates (`neonroot template …`) seed new workspaces (`create --template <name>`):
+
+| Command | Purpose |
+|---------|---------|
+| `template ls` | List templates (shipped + your own) |
+| `template new <name>` | Scaffold a user template to customize |
+| `template path` | Print the user templates directory |
+
+Shipped templates are embedded; your own live in
+`$XDG_CONFIG_HOME/neonroot/templates/<name>/` (a same-named user template wins).
+`{{workspace}}` in any file is replaced with the workspace name. This is where
+dev ergonomics live — editor configs, a `.tmux.conf`, scaffolding — so rich
+setups are shareable data, not baked into the binary.
+
 Vault setup (one-time):
 
 | Command | Purpose |

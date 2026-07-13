@@ -18,20 +18,6 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 )
 
-// Runtime is the container-runtime capability the rest of NeonRoot depends on.
-// Keeping it small lets sessions and (later) commit orchestration swap in a fake.
-type Runtime interface {
-	// Available reports whether the runtime binary is usable.
-	Available() bool
-	// Version returns the runtime's client version string.
-	Version(ctx context.Context) (string, error)
-	// Run starts a detached container from image with the given options and
-	// returns its container ID.
-	Run(ctx context.Context, spec RunSpec) (string, error)
-	// Stop stops (and removes) a container by ID or name.
-	Stop(ctx context.Context, id string) error
-}
-
 // RunSpec describes a container to start.
 type RunSpec struct {
 	Image string

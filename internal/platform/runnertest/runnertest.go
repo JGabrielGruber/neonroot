@@ -1,5 +1,5 @@
 // Package runnertest provides a recording platform.Runner for unit-testing
-// adapters (podman, tmux, bananenv) without spawning real processes. It records
+// adapters (podman, tmux, git) without spawning real processes. It records
 // every invocation and returns scripted results, so tests can assert exactly
 // which command and arguments an adapter built.
 package runnertest

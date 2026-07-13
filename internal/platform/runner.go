@@ -6,7 +6,7 @@ import (
 	"os/exec"
 )
 
-// Runner is the seam through which adapters (podman, tmux, bananenv) invoke
+// Runner is the seam through which adapters (podman, tmux, git) invoke
 // external binaries. Injecting a Runner lets those adapters be unit-tested by
 // asserting the command and args without spawning a real process.
 type Runner interface {

@@ -20,8 +20,8 @@ Workspace commands (the everyday surface):
 |-----------|---------|
 | `list`    | List your workspaces (vault, image, loaded state) |
 | `create <name>` | Create a workspace (bare git repo) — default template or `--from <ws>`, optional `--image` |
-| `load <name>`   | `git clone` a workspace into tmpfs; container (if image) + tmux session |
-| `attach <name>` | Attach to a loaded workspace's session (inside its container) |
+| `load <name>`   | `git clone` a workspace into tmpfs; start its container (if image) |
+| `attach <name>` | Open a shell in the workspace (execs into its container) |
 | `commit <name>` | `git commit` + `git push` back (refuses on conflict; `--rebase`/`--as`/`--force`) |
 | `status [name]` | Vault overview, or a workspace's live git state (dirty/ahead/behind) |
 | `snapshot <name> <label>` | Tag a durable point-in-time copy of the workspace |
@@ -94,7 +94,7 @@ internal/
   git/                git adapter: workspaces are bare repos in the vault
   workspace/          load orchestration (clone + session/container seams)
   session/ runtime/   tmux / podman adapters (via platform.Runner)
-  template/           embedded default workspace skeleton
+  template/           embedded + user workspace and image templates
 ```
 
 Config lives on the SD card (`$XDG_CONFIG_HOME/neonroot/config.toml`); all state,
@@ -107,8 +107,14 @@ The vault stores the catalog (`index.toml`) and a bare git repo per workspace.
 go build -o neonroot .
 
 neonroot vault add ext /mnt/ext/neonroot   # one-time: becomes the default vault
-neonroot create webapp --image arch-minimal
-neonroot load webapp                       # git clone + container + tmux; unplug the drive
+
+# Optional: a batteries-included dev image (build once, online → stored in the vault)
+neonroot image create dev --template arch-dev
+neonroot image build dev
+
+neonroot create webapp --image dev         # or omit --image for host-only
+neonroot load webapp                       # git clone + container; unplug the drive
+neonroot attach webapp                     # shell in the workspace/container
 # ... work untethered (commit locally offline) ...
 neonroot commit webapp                     # re-plug, push changes back
 ```

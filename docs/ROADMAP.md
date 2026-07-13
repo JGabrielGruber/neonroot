@@ -143,8 +143,9 @@ available.
   `[[vault]]`/`default_vault`, `vault add/list/set-default` command tree, `--vault`
   flag, `Workspace.SourceVault`). `index.toml` on-disk format unchanged. Full suite
   green; CLI smoke-tested.
-- **Phase C — Hot-storage usage in `list`/`status`.** Which workspaces are hot, live
-  dirty/ahead state, tmpfs footprint.
+- **Phase C — Hot-storage usage in `status`.** ✅ **Done (non-git part).** `status`
+  now shows a "hot storage" section: per-loaded-workspace tmpfs footprint + total
+  (`workspace.HotSize`). Live dirty/ahead state arrives with git (Phase D).
 - **Phase D — Git workspace lifecycle.** New `internal/git` adapter (via
   `platform.Runner`). `create`=`init --bare`+seed, `load`=`clone`, `status`=`git
   status`+ahead/behind, `commit`=commit+push (**refuse on non-ff**). Retires

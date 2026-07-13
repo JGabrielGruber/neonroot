@@ -88,13 +88,31 @@ func overviewStatus(cmd *cobra.Command) error {
 		return err
 	}
 	if len(loaded) > 0 {
-		fmt.Fprintf(out, "\nloaded workspaces (in tmpfs):\n")
+		fmt.Fprintf(out, "\nhot storage — loaded workspaces (in tmpfs):\n")
+		var total int64
 		for _, w := range loaded {
-			fmt.Fprintf(out, "  %-12s from %-10s %s\n", w.Name, w.SourceVault, w.Root)
+			size := workspace.HotSize(w.Root)
+			total += size
+			fmt.Fprintf(out, "  %-12s from %-10s %8s  %s\n", w.Name, w.SourceVault, humanSize(size), w.Root)
 		}
+		fmt.Fprintf(out, "  %-12s %27s\n", "TOTAL", humanSize(total))
 		fmt.Fprintf(out, "\nrun 'neonroot status <workspace>' to see pending changes\n")
 	}
 	return nil
+}
+
+// humanSize renders a byte count compactly.
+func humanSize(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 func init() {

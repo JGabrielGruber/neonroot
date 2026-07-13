@@ -16,6 +16,24 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 )
 
+// HotSize returns the tmpfs footprint (bytes of regular files) of a loaded
+// workspace's payload. Best-effort: unreadable entries are skipped.
+func HotSize(root string) int64 {
+	var total int64
+	_ = filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.Type().IsRegular() {
+			if info, err := d.Info(); err == nil {
+				total += info.Size()
+			}
+		}
+		return nil
+	})
+	return total
+}
+
 // WriteState persists a loaded workspace's record to its tmpfs state file.
 func WriteState(paths platform.Paths, ws *domain.Workspace) error {
 	path := paths.StatePath(ws.Name)

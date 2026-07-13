@@ -13,39 +13,14 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/workspace"
 )
 
-var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List configured repos and their availability",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, _ []string) error {
-		repos := app.Config.Repos
-		if len(repos) == 0 {
-			app.UI.Info("no repos configured")
-			return nil
-		}
-		// Read the mount table once and resolve every repo against it.
-		mounts, err := platform.Mounts()
-		if err != nil {
-			return err
-		}
-		out := cmd.OutOrStdout()
-		for _, r := range repos {
-			state := repo.State(r.Path, mounts)
-			marker := " "
-			if r.Name == app.Config.DefaultRepo {
-				marker = "*"
-			}
-			fmt.Fprintf(out, "%s %-12s %-11s %s\n", marker, r.Name, state, r.Path)
-		}
-		return nil
-	},
-}
-
 var listRepoFlag string
 
-var listWorkspacesCmd = &cobra.Command{
-	Use:   "workspaces",
-	Short: "List workspaces across available repos",
+// listCmd is workspace-first: the bare `neonroot list` shows your workspaces.
+// Repos are background config, listed via `neonroot repo list`.
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List your workspaces",
+	Long:  "Lists workspaces across available repos, with their repo, image, and loaded state.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		mounts, err := platform.Mounts()
@@ -53,7 +28,9 @@ var listWorkspacesCmd = &cobra.Command{
 			return err
 		}
 		out := cmd.OutOrStdout()
-		fmt.Fprintf(out, "%-10s %-14s %-9s %s\n", "REPO", "WORKSPACE", "STATE", "IMAGE")
+		fmt.Fprintf(out, "%-14s %-10s %-9s %s\n", "WORKSPACE", "REPO", "STATE", "IMAGE")
+
+		var rows int
 		for _, r := range app.Config.Repos {
 			if listRepoFlag != "" && r.Name != listRepoFlag {
 				continue
@@ -78,15 +55,18 @@ var listWorkspacesCmd = &cobra.Command{
 				if image == "" {
 					image = "-"
 				}
-				fmt.Fprintf(out, "%-10s %-14s %-9s %s\n", r.Name, w.Name, state, image)
+				fmt.Fprintf(out, "%-14s %-10s %-9s %s\n", w.Name, r.Name, state, image)
+				rows++
 			}
+		}
+		if rows == 0 {
+			app.UI.Info("no workspaces yet — create one with 'neonroot create <name>'")
 		}
 		return nil
 	},
 }
 
 func init() {
-	listWorkspacesCmd.Flags().StringVarP(&listRepoFlag, "repo", "r", "", "limit to one repo")
-	listCmd.AddCommand(listWorkspacesCmd)
+	listCmd.Flags().StringVarP(&listRepoFlag, "repo", "r", "", "limit to one repo")
 	rootCmd.AddCommand(listCmd)
 }

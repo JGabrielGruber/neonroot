@@ -167,6 +167,13 @@ testable deliverable (unit-testable with fakes; no drive/Podman needed until Pha
    reset`**, not `os.RemoveAll` — layer dirs are owned by subuid-mapped users.
    Moot across reboots (tmpfs clears), but relevant to any in-session wipe.
 
+- **Phase 6 — Workspace-first UX.** ✅ **Done.** The workspace is the primary
+  object: bare `neonroot list` shows workspaces (repo/image/loaded); repo listing
+  moved to `repo list`. Repo is one-time setup — `repo add` makes the first real
+  repo the default (replacing the scratch placeholder), plus `repo set-default`,
+  so workspace commands need no `--repo`. A workspace *uses* a repo (storage) and
+  optionally an image (runtime), handled git-remote / docker-reference style.
+
 ## Out of scope (at least initially)
 
 Full GUI · cloud sync / remote execution · package management inside workspaces ·

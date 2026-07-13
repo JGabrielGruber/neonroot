@@ -8,26 +8,35 @@ NeonRoot hydrates development workspaces from cold storage (an external drive)
 into tmpfs so you can unplug and work untethered, then commit changes back to the
 drive when you choose. It never writes to the SD card it boots from.
 
+NeonRoot is **workspace-first**: you name a workspace, and it uses a repo (where
+it's stored) and optionally an image (what it runs in). You configure a repo once
+and then work by workspace name.
+
 ## Commands
 
-| Command    | Status | Purpose |
-|------------|--------|---------|
-| `list`     | ✅ working | List repos; `list workspaces` lists workspaces |
-| `status`   | ✅ working | Show repos, availability, and contents |
-| `create`   | ✅ working | Create a workspace (template or `--from`), optional `--image` |
-| `repo add` | ✅ working | Register a repo path in config |
-| `load`     | ✅ working | Hydrate into tmpfs; start a container (if image) + tmux session |
-| `attach`   | ✅ working | Attach to a loaded workspace's session (inside its container) |
-| `stop`     | ✅ working | Stop the container/session and drop the tmpfs copy |
-| `commit`   | ✅ working | Write workspace changes back to a repo |
-| `status`   | ✅ working | Repo availability, or a workspace's pending diff |
+Workspace commands (the everyday surface):
 
-Global flags: `--quiet`/`-q` (warnings only), `--plain` (no color).
-`create`/`load` take `--repo`/`-r` to target a repo (defaults to the configured
-default); `load --no-session` skips starting tmux.
-`commit` takes `--repo` (target a different repo), `--as <name>` (save a copy
-under a new name), and `--force` (override a conflict). `status <workspace>`
-shows that workspace's pending changes.
+| Command   | Purpose |
+|-----------|---------|
+| `list`    | List your workspaces (repo, image, loaded state) |
+| `create <name>` | Create a workspace — default template or `--from <ws>`, optional `--image` |
+| `load <name>`   | Hydrate into tmpfs; start a container (if image) + tmux session |
+| `attach <name>` | Attach to a loaded workspace's session (inside its container) |
+| `commit <name>` | Write changes back — `--as <name>`, `--force`, `--repo` |
+| `status [name]` | Repo overview, or a workspace's pending diff |
+| `stop <name>`   | Stop the container/session and drop the tmpfs copy |
+
+Repo setup (one-time):
+
+| Command | Purpose |
+|---------|---------|
+| `repo add <name> <path>` | Register a repo; the first becomes the default |
+| `repo list`              | List repos and availability |
+| `repo set-default <name>`| Change the default repo |
+
+Workspace commands default to the configured default repo (no `--repo` needed);
+pass `--repo`/`-r` to target another. Global: `--quiet`/`-q`, `--plain`.
+`load` takes `--no-session` and `--no-container`.
 
 Integration tests (real tmux/Podman) run with `go test -tags integration ./...`.
 
@@ -54,7 +63,12 @@ workspaces, and locks are redirected to tmpfs (`/run/user/$UID`, `/tmp`).
 
 ```bash
 go build -o neonroot .
-./neonroot list
+
+neonroot repo add ext /mnt/ext/neonroot   # one-time: becomes the default repo
+neonroot create webapp --image arch-minimal
+neonroot load webapp                       # hydrate + container + tmux; unplug the drive
+# ... work untethered ...
+neonroot commit webapp                     # re-plug, write changes back
 ```
 
 Version: **0.0.2**

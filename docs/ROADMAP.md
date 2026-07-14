@@ -62,9 +62,12 @@ Broaden beyond the local drive; make carrying an environment reach a server.
   filesystem; `vault.State` just checks the mount. No special code (see `ARCHITECTURE.md`).
 - ✅ **Multi-device sync** *(docs)* — the same remote configured on two machines, each with
   its own tmpfs clone, reconciled by git non-ff (see `ARCHITECTURE.md`).
-- **Secrets & identity** *(next)* — SSH-agent socket + git identity into a loaded workspace
-  (opt-in, per workspace, into RAM, never on the card). Its own focused pass; most useful
-  now that remotes push over ssh.
+- ✅ **Secrets & identity** — opt-in, per-workspace, ephemeral passthrough: env vars from
+  **bananenv** and/or a `--env-file`, plus the SSH-agent socket + read-only `~/.gitconfig`
+  bind-mounted into the container. Into RAM (podman `--env-file`), never on the card, wiped
+  on `stop`; surfaced as a `(secrets)` marker. `create/set/load --secrets`.
+- ✅ **rsync transport** — `vault --rsync` prefers rsync (resume + skip-unchanged) over scp
+  for image transfers, with scp fallback.
 - **Remote images: `snapshot`/`set`/`rm`** *(next)* — currently local-vault only; remote
   vaults defer these with a clear message.
 

@@ -49,6 +49,26 @@ gocryptfs/LUKS filesystem — `vault.State` just checks the mount. **Multi-devic
 the same `Remote` configured on two machines, each with its own tmpfs clone, reconciled by
 git non-ff. Neither needs new code.
 
+## Secrets passthrough (opt-in, ephemeral)
+
+A workspace can opt into carrying your identity into its container
+(`create/set/load --secrets`; `internal/secrets`). Two halves, both into tmpfs, both wiped
+on `stop` (the workspace state dir goes), never on the card:
+- **Env vars** — merged from `bananenv list` (its own tmpfs env store; parsed `export
+  K="V"`, optional dependency) and an optional `load --env-file <dotenv>` — written to a
+  0600 env-file in the workspace state dir and passed as podman `--env-file`. Using a file
+  (not `-e KEY=val`) keeps secret **values** out of the process argv (`ps`).
+- **Identity** — the host `$SSH_AUTH_SOCK` is bind-mounted to `/ssh-agent` (with
+  `SSH_AUTH_SOCK` set inside) and `~/.gitconfig` to `/root/.gitconfig:ro` (rootless podman
+  maps container-root to the host uid, so `/root` is home). Only the **agent socket** is
+  forwarded — the private key never enters the container. A missing agent/gitconfig warns,
+  never fails.
+
+Both ride the `domain.SessionOpts{EnvFile, Mounts}` added to `runtime.Run`/`Start`/
+`StartPod`. It is opt-in and surfaced as a `(secrets)` marker in `list`/`status` because
+the container then authenticates as you for its lifetime — on SELinux-enforcing hosts the
+agent socket may need `--security-opt label=disable` (a target-hardware item).
+
 ## Path layout (the SD-write guarantee)
 
 All resolution is centralized in `internal/platform/paths.go`.
@@ -88,7 +108,8 @@ internal/
   vault/            vault resolution, availability (VaultState via mountinfo),
                     index.toml read/write + version gate, image layout
   git/              git adapter (clone/commit/push/status/snapshot) — workspaces are git
-  remote/           ssh vault addressing (Addr) + scp/ssh transport (Transport)
+  remote/           ssh vault addressing (Addr) + scp/ssh/rsync transport (Transport)
+  secrets/          opt-in env-file (bananenv/dotenv) + ssh-agent/gitconfig passthrough
   workspace/        load orchestration + loaded-workspace state (List/ReadState/HotSize)
   session/          tmux adapter (host-only sessions)
   runtime/          podman adapter: graphroot→tmpfs, images, pods

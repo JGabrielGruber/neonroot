@@ -62,7 +62,24 @@ Availability is optimistic (no network probe — commands just work offline and 
 lazily if the host is down), and two machines writing the same vault reconcile on git's
 non-fast-forward, never a silent overwrite. Encrypted vaults (point a vault at a mounted
 gocryptfs/LUKS path) and multi-device sync fall out of the same model — see
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Add `--rsync` to a remote vault for
+resumable, skip-unchanged image transfers (falls back to scp).
+
+**Secrets, ephemerally.** Opt a workspace into identity passthrough and NeonRoot injects
+your env vars and git/ssh identity into the container on load — into RAM, never on the
+card, wiped on `stop`:
+
+```bash
+bananenv set STRIPE_KEY=sk_test_…                # your tmpfs env store (optional)
+neonroot create webapp --image dev --secrets     # or: set --secrets / load --secrets
+neonroot load webapp                             # container gets $STRIPE_KEY,
+                                                 #   your ssh agent + gitconfig (ro)
+neonroot load webapp --env-file .env.local       # or inject an extra dotenv
+```
+
+Env values go via podman `--env-file` (never in `ps`); only the SSH **agent socket** is
+forwarded, so your private key never enters the container. It's opt-in and shown as a
+`(secrets)` marker in `list`/`status`, because the workspace then carries your identity.
 
 ## How it works
 
@@ -104,8 +121,10 @@ Conflicts on `commit` resolve with `--rebase` / `--merge` / `--as <branch>` / `-
 
 Linux (Arch/Manjaro-first). **`git`** required; **`tmux`** / **`podman`** optional —
 NeonRoot degrades to host-only when they're absent. Remote (ssh) vaults additionally use
-**`ssh`** / **`scp`** and expect key-based auth to the host. Config lives on the card; all
-state, clones, and locks are redirected to tmpfs.
+**`ssh`** / **`scp`** (or **`rsync`** with `--rsync`) and expect key-based auth to the
+host. Secrets passthrough uses your running **ssh-agent** and, optionally,
+**`bananenv`** for env vars. Config lives on the card; all state, clones, locks, and
+injected secrets are redirected to tmpfs.
 
 ## Docs
 

@@ -5,6 +5,21 @@ deliberately (see `docs/VISION.md` for where it's going).
 
 ## Unreleased
 
+### E3.6 — secrets passthrough + rsync
+
+- **Secrets / identity passthrough** — opt-in, per-workspace, ephemeral. On load
+  (`create --secrets`, `set --secrets`, or `load --secrets`), NeonRoot injects
+  environment variables from **bananenv** (github.com/JGabrielGruber/bananenv —
+  its tmpfs env store) and/or a `load --env-file <dotenv>`, and bind-mounts the
+  host SSH agent socket + read-only `~/.gitconfig` so in-container `git push` over
+  ssh works. Env vars go via podman `--env-file` (values never appear in `ps`);
+  the private key never enters the container (only the agent socket). Nothing lands
+  on the card — the env-file is tmpfs, wiped on `stop`. `list`/`status` show a
+  `(secrets)` marker. bananenv is optional (absent → skipped).
+- **rsync transport (opt-in)** — `vault add --rsync` / `vault set --rsync` makes a
+  remote vault prefer rsync (resume + skip-unchanged) over scp for image transfers,
+  falling back to scp when rsync is absent on either end.
+
 ### E3 — reach & safety
 
 - **Remote vaults** — a vault can live on an ssh server, not just a local drive:

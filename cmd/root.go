@@ -11,6 +11,7 @@ import (
 
 	"github.com/JGabrielGruber/neonroot/internal/config"
 	"github.com/JGabrielGruber/neonroot/internal/domain"
+	"github.com/JGabrielGruber/neonroot/internal/git"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 	"github.com/JGabrielGruber/neonroot/internal/runtime"
 	"github.com/JGabrielGruber/neonroot/internal/tui"
@@ -124,8 +125,13 @@ func (a *App) resolveVault(name string) (domain.Vault, error) {
 }
 
 // requireAvailable returns ErrVaultUnavailable (with a plug-in hint) unless the
-// vault's backing drive is currently mounted.
+// vault is usable now. A local vault requires its backing drive to be mounted; a
+// remote vault always passes here — its reachability is resolved lazily on the
+// first ssh op, so status/list stay snappy and offline-first.
 func (a *App) requireAvailable(r domain.Vault) error {
+	if r.IsRemote() {
+		return nil
+	}
 	state, err := vault.StateLive(r.Path)
 	if err != nil {
 		return err
@@ -135,6 +141,13 @@ func (a *App) requireAvailable(r domain.Vault) error {
 			domain.ErrVaultUnavailable, r.Name, r.Path)
 	}
 	return nil
+}
+
+// catalog returns a kind-agnostic catalog reader/writer: local vaults resolve
+// to their on-drive index.toml, remote vaults to their _catalog.git cloned into
+// the tmpfs cache.
+func (a *App) catalog() vault.Catalog {
+	return vault.Catalog{Git: &git.Git{Runner: a.Runner}, CacheDir: a.Paths.Cache}
 }
 
 // podman builds the Podman adapter with storage pinned to tmpfs, creating the

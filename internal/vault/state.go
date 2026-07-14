@@ -43,6 +43,17 @@ func StateLive(vaultPath string) (domain.VaultState, error) {
 	return State(vaultPath, mounts), nil
 }
 
+// StateForVault resolves a vault's state regardless of kind. A remote vault is
+// VaultStateRemote (reachability is deferred to the first ssh op — no network
+// probe here, to keep status/list snappy and offline-first); a local vault is
+// resolved against the live mount table.
+func StateForVault(v domain.Vault) (domain.VaultState, error) {
+	if v.IsRemote() {
+		return domain.VaultStateRemote, nil
+	}
+	return StateLive(v.Path)
+}
+
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()

@@ -39,6 +39,10 @@ const (
 	// VaultStateUnavailable means the drive is not mounted (the common case for
 	// the default, untethered workflow).
 	VaultStateUnavailable
+	// VaultStateRemote means the vault is hosted over ssh; reachability is not
+	// probed up front (offline-first), so this is a distinct, honest state rather
+	// than a claim that the network is currently up.
+	VaultStateRemote
 )
 
 func (s VaultState) String() string {
@@ -47,6 +51,8 @@ func (s VaultState) String() string {
 		return "available"
 	case VaultStateUnavailable:
 		return "unavailable"
+	case VaultStateRemote:
+		return "remote"
 	default:
 		return "unknown"
 	}

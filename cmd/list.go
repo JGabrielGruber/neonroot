@@ -31,15 +31,18 @@ var listCmd = &cobra.Command{
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "%-14s %-10s %-9s %s\n", "WORKSPACE", "VAULT", "STATE", "IMAGE")
 
+		cat := app.catalog()
 		var rows int
 		for _, r := range app.Config.Vaults {
 			if listVaultFlag != "" && r.Name != listVaultFlag {
 				continue
 			}
-			if vault.State(r.Path, mounts) != domain.VaultStateAvailable {
+			// Local vaults must be mounted to be listed; remote vaults are read
+			// over ssh (an unreachable one warns rather than being skipped).
+			if !r.IsRemote() && vault.State(r.Path, mounts) != domain.VaultStateAvailable {
 				continue
 			}
-			idx, err := vault.ReadIndex(r.Path)
+			idx, err := cat.Read(cmd.Context(), r)
 			if errors.Is(err, fs.ErrNotExist) {
 				continue
 			}

@@ -94,7 +94,25 @@ func TestInputEscCancels(t *testing.T) {
 func TestActionErrorSurfaced(t *testing.T) {
 	m := withOne(true)
 	nm, _ := m.Update(actionDoneMsg{err: errNoSelf})
-	if got := nm.(model).lastErr; got == "" {
-		t.Error("an action error should be surfaced in lastErr")
+	got := nm.(model)
+	if got.status == "" || !got.statusErr {
+		t.Errorf("an action error should surface in status (err), got status=%q err=%v", got.status, got.statusErr)
+	}
+	if got.busy != "" {
+		t.Error("busy should clear when the action completes")
+	}
+}
+
+func TestBackgroundActionSetsBusyAndGuards(t *testing.T) {
+	m := withOne(true)
+	// 'c' (commit) on a loaded workspace sets busy.
+	nm, cmd := m.updateKey(runes("c"))
+	m = nm.(model)
+	if m.busy == "" || cmd == nil {
+		t.Fatal("commit should set a busy label and dispatch")
+	}
+	// A second action while busy is ignored (no overlapping subprocess).
+	if _, cmd := m.updateKey(runes("x")); cmd != nil {
+		t.Error("actions should be ignored while busy")
 	}
 }

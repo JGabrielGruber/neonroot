@@ -28,9 +28,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case actionDoneMsg:
-		m.lastErr = ""
-		if msg.err != nil {
-			m.lastErr = msg.err.Error()
+		m.busy = ""
+		m.statusErr = msg.err != nil
+		switch {
+		case msg.err != nil && lastLine(msg.out) != "":
+			m.status = lastLine(msg.out)
+		case msg.err != nil:
+			m.status = msg.err.Error()
+		default:
+			m.status = lastLine(msg.out)
 		}
 		cmd := m.refresh() // re-read state after the action
 		return m, cmd
@@ -62,31 +68,47 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "n": // new workspace
+		if m.busy != "" {
+			return m, nil
+		}
 		m.inputting = true
 		m.input = ""
-		m.lastErr = ""
+		m.status = ""
 		return m, nil
-	case "y": // sync all
-		return m, m.runVerb("sync")
 
-	case "l": // load the selected cold workspace
+	// attach hands over the terminal; every other action runs in the background
+	// with its output captured, so the dashboard never flashes to the log.
+	case "a":
+		if w, ok := m.selected(); ok && w.loaded && m.busy == "" {
+			return m, m.runInteractive("attach", w.name)
+		}
+	case "y":
+		return m.bgAction("syncing all", "sync")
+	case "l":
 		if w, ok := m.selected(); ok && !w.loaded {
-			return m, m.runVerb("load", w.name, "--vault", w.vaultName)
+			return m.bgAction("loading "+w.name, "load", w.name, "--vault", w.vaultName)
 		}
-	case "a": // attach the selected loaded workspace
+	case "c":
 		if w, ok := m.selected(); ok && w.loaded {
-			return m, m.runVerb("attach", w.name)
+			return m.bgAction("committing "+w.name, "commit", w.name)
 		}
-	case "c": // commit the selected loaded workspace
+	case "x":
 		if w, ok := m.selected(); ok && w.loaded {
-			return m, m.runVerb("commit", w.name)
-		}
-	case "x": // stop the selected loaded workspace
-		if w, ok := m.selected(); ok && w.loaded {
-			return m, m.runVerb("stop", w.name)
+			return m.bgAction("stopping "+w.name, "stop", w.name)
 		}
 	}
 	return m, nil
+}
+
+// bgAction starts a background verb unless one is already running (prevents
+// overlapping subprocesses), setting the busy label shown in the status line.
+func (m model) bgAction(label string, args ...string) (tea.Model, tea.Cmd) {
+	if m.busy != "" {
+		return m, nil
+	}
+	m.busy = label
+	m.status = ""
+	return m, m.runVerb(args...)
 }
 
 // updateInput handles keys while typing a new workspace name.
@@ -97,7 +119,7 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.inputting = false
 		m.input = ""
 		if name != "" {
-			return m, m.runVerb("create", name)
+			return m.bgAction("creating "+name, "create", name)
 		}
 		return m, nil
 	case "esc":

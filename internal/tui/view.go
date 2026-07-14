@@ -43,8 +43,14 @@ func (m model) View() string {
 	if m.inputting {
 		b.WriteString(" " + th.Accent.Render("new workspace: ") + th.Step.Render(m.input+"▌") + "\n")
 	}
-	if m.lastErr != "" {
-		b.WriteString(" " + th.Error.Render(m.lastErr) + "\n")
+	if m.busy != "" {
+		b.WriteString(" " + th.Step.Render("⟳ "+m.busy+"…") + "\n")
+	} else if m.status != "" {
+		style := th.Success
+		if m.statusErr {
+			style = th.Error
+		}
+		b.WriteString(" " + style.Render(m.status) + "\n")
 	}
 	b.WriteString(footer(th, m.inputting))
 	return b.String()

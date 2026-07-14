@@ -10,7 +10,9 @@ type model struct {
 	loaded        bool // first snapshot has arrived
 	inputting     bool // capturing a new-workspace name
 	input         string
-	lastErr       string // last action's error, shown in a status line
+	busy          string // a background action is running (its label), else ""
+	status        string // last action's result line
+	statusErr     bool   // status is an error
 	width, height int
 }
 

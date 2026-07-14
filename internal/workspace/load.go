@@ -11,6 +11,7 @@ import (
 
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
+	"github.com/JGabrielGruber/neonroot/internal/remote"
 	"github.com/JGabrielGruber/neonroot/internal/ui"
 	"github.com/JGabrielGruber/neonroot/internal/vault"
 )
@@ -54,6 +55,9 @@ type Loader struct {
 	Paths platform.Paths
 	UI    ui.Reporter
 	Git   Git
+	// Catalog reads the vault's index kind-agnostically (local index.toml or a
+	// remote _catalog.git). Its zero value works for local vaults.
+	Catalog vault.Catalog
 	// Sessions/Runtime start a host session / container after the clone; both
 	// degrade gracefully — a failure there never fails a load.
 	Sessions Sessions
@@ -71,16 +75,22 @@ type Loader struct {
 // It refuses if the vault is unreachable or the workspace is unknown. If the
 // workspace is already loaded it is reused (non-destructive) unless Clean is set.
 func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
-	state, err := vault.StateLive(v.Path)
-	if err != nil {
-		return nil, err
-	}
-	if state != domain.VaultStateAvailable {
-		return nil, fmt.Errorf("%w: %q at %s — plug in the drive and retry",
-			domain.ErrVaultUnavailable, v.Name, v.Path)
+	ctx := context.Background()
+
+	// A local vault must be mounted; a remote vault is reached lazily over ssh
+	// (its unreachability surfaces on the clone below, not here).
+	if !v.IsRemote() {
+		state, err := vault.StateLive(v.Path)
+		if err != nil {
+			return nil, err
+		}
+		if state != domain.VaultStateAvailable {
+			return nil, fmt.Errorf("%w: %q at %s — plug in the drive and retry",
+				domain.ErrVaultUnavailable, v.Name, v.Path)
+		}
 	}
 
-	idx, err := vault.ReadIndex(v.Path)
+	idx, err := l.Catalog.Read(ctx, v)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("%w: vault %q has no workspaces", domain.ErrWorkspaceNotFound, v.Name)
 	}
@@ -93,7 +103,6 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 	}
 
 	dst := l.Paths.WorkspaceRoot(name)
-	ctx := context.Background()
 
 	// Non-destructive reuse: an already-loaded workspace is kept as-is unless the
 	// user explicitly asks to --clean. --clean must not silently discard pending
@@ -116,7 +125,16 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 		_ = os.RemoveAll(l.Paths.WorkspaceStateDir(name))
 	}
 
+	// The bare repo lives at <vault>/workspaces/<name>.git — on the local
+	// filesystem, or over ssh for a remote vault. git.Clone accepts either.
 	origin := filepath.Join(v.Path, entry.Root)
+	if v.IsRemote() {
+		addr, err := remote.Parse(v.Remote)
+		if err != nil {
+			return nil, err
+		}
+		origin = addr.SSHURL(entry.Root)
+	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 		return nil, err
 	}
@@ -144,7 +162,12 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 	// If there's no container (host-only, or the container failed), fall back to
 	// a host tmux session.
 	containerized := false
-	if len(entry.Images) > 0 && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
+	// Remote vaults run host-only for now: their image tarballs live on the
+	// server and transport lands in a later stage. Warn so it isn't silent.
+	if v.IsRemote() && len(entry.Images) > 0 && !l.NoContainer {
+		l.UI.Warn(fmt.Sprintf("%q declares an image but remote-vault images aren't transported yet — loading host-only", name))
+	}
+	if len(entry.Images) > 0 && !v.IsRemote() && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
 		if cid, err := l.startContainer(ctx, v, entry, name, dst); err != nil {
 			l.UI.Warn(fmt.Sprintf("container not started (host-only): %v", err))
 		} else {

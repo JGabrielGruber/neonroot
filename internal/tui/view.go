@@ -88,6 +88,9 @@ func wsLine(th ui.Theme, w wsRow, selected bool) string {
 	if len(w.images) > 0 {
 		img = th.Muted.Render("  [" + strings.Join(w.images, ",") + "]")
 	}
+	if w.isolation != "" {
+		img += th.Warn.Render("  " + w.isolation)
+	}
 	name := fmt.Sprintf("%-16s", w.name)
 	body := fmt.Sprintf("%s %s %s%s", mark, name, tail, img)
 	if selected {

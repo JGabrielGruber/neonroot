@@ -24,6 +24,9 @@ type Workspace struct {
 	// Shell is the command to run when attaching into the container. Empty uses
 	// the default (tmux if present, else bash).
 	Shell []string `toml:"shell,omitempty"`
+	// Isolation records the sandbox profile the container was started with
+	// ("sandbox"/"isolated"), for display and reaping. Empty = trusting default.
+	Isolation string `toml:"isolation,omitempty"`
 }
 
 // Fingerprint is a cheap identity of a vault index's state at a point in time,

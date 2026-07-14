@@ -87,7 +87,10 @@ func overviewStatus(cmd *cobra.Command) error {
 		for _, w := range idx.Workspaces {
 			mark := ""
 			if w.Secrets {
-				mark = " (secrets)"
+				mark += " (secrets)"
+			}
+			if w.Isolation != "" {
+				mark += " (" + w.Isolation + ")"
 			}
 			fmt.Fprintf(out, "      - %s%s\n", w.Name, mark)
 		}

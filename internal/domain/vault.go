@@ -97,6 +97,10 @@ type IndexWorkspace struct {
 	// vars + the SSH agent socket + ~/.gitconfig, injected ephemerally into the
 	// container (never on the card). Opt-in because it carries your identity in.
 	Secrets bool `toml:"secrets,omitempty"`
+	// Isolation locks the container down for untrusted/agent use: "" (trusting
+	// default), "sandbox" (no identity, dropped caps, limits), or "isolated"
+	// (sandbox + no network). Mutually exclusive with Secrets.
+	Isolation string `toml:"isolation,omitempty"`
 }
 
 // PrimaryImage returns the image the workspace's shell runs in, or "" for

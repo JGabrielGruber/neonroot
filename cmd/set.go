@@ -22,6 +22,8 @@ var (
 	setShellFlag       string
 	setNoImageFlag     bool
 	setSecretsFlag     bool
+	setSandboxFlag     bool
+	setIsolatedFlag    bool
 )
 
 var setCmd = &cobra.Command{
@@ -108,6 +110,12 @@ requires the workspace to be stopped first.`,
 		if f.Changed("secrets") {
 			entry.Secrets = setSecretsFlag
 		}
+		if f.Changed("sandbox") || f.Changed("isolated") {
+			entry.Isolation = isolationProfile(setSandboxFlag, setIsolatedFlag)
+		}
+		if entry.Isolation != "" && entry.Secrets {
+			return fmt.Errorf("--secrets and --sandbox/--isolated are mutually exclusive (a sandbox must not carry your identity)")
+		}
 
 		idx.Workspaces[pos] = entry
 		vault.Bump(idx)
@@ -134,5 +142,7 @@ func init() {
 	f.StringVar(&setShellFlag, "shell", "", "command to run on attach (empty resets to default: a login shell)")
 	f.BoolVar(&setNoImageFlag, "no-image", false, "make the workspace host-only (clear its images)")
 	f.BoolVar(&setSecretsFlag, "secrets", false, "toggle identity passthrough on load (use --secrets=false to disable)")
+	f.BoolVar(&setSandboxFlag, "sandbox", false, "sandbox the container (agent/untrusted; --sandbox=false clears)")
+	f.BoolVar(&setIsolatedFlag, "isolated", false, "sandbox + no network (clears with both flags false)")
 	rootCmd.AddCommand(setCmd)
 }

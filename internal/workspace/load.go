@@ -74,6 +74,9 @@ type Loader struct {
 	// EnvFile is an optional extra dotenv file whose vars are injected into the
 	// container (the `load --env-file` flag).
 	EnvFile string
+	// Isolation overrides the workspace's stored sandbox profile for this load
+	// (the `load --sandbox`/`--isolated` flags); "" uses the stored setting.
+	Isolation string
 	// NoContainer forces host-only even when a workspace declares an image.
 	NoContainer bool
 	// Clean discards an already-loaded clone (uncommitted work included) and
@@ -156,6 +159,12 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 		return nil, fmt.Errorf("cloning %q: %w", name, err)
 	}
 
+	// The effective isolation profile: a load-time override wins over the stored one.
+	isolation := entry.Isolation
+	if l.Isolation != "" {
+		isolation = l.Isolation
+	}
+
 	ws := &domain.Workspace{
 		Name:        name,
 		SourceVault: v.Name,
@@ -163,6 +172,7 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 		HydratedAt:  time.Now().UTC().Format(time.RFC3339),
 		Images:      entry.Images,
 		Shell:       entry.Shell,
+		Isolation:   isolation,
 	}
 	if err := WriteState(l.Paths, ws); err != nil {
 		return nil, err
@@ -175,12 +185,22 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 	// a host tmux session.
 	containerized := false
 	if len(entry.Images) > 0 && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
-		opts, warns, serr := l.buildSecrets(ctx, entry, name)
-		for _, w := range warns {
-			l.UI.Warn(w)
-		}
-		if serr != nil {
-			return nil, serr
+		var opts domain.SessionOpts
+		if sb, sandboxed := domain.SandboxFor(isolation); sandboxed {
+			// A sandbox must not carry your identity — skip all secrets injection.
+			opts.Sandbox = &sb
+			if entry.Secrets || l.Secrets || l.EnvFile != "" {
+				l.UI.Warn(fmt.Sprintf("%q is %s — skipping secrets/identity injection", name, isolation))
+			}
+		} else {
+			o, warns, serr := l.buildSecrets(ctx, entry, name)
+			for _, w := range warns {
+				l.UI.Warn(w)
+			}
+			if serr != nil {
+				return nil, serr
+			}
+			opts = o
 		}
 		if cid, err := l.startContainer(ctx, v, entry, name, dst, opts); err != nil {
 			l.UI.Warn(fmt.Sprintf("container not started (host-only): %v", err))

@@ -30,6 +30,8 @@ var (
 	createPortFlag     string
 	createUpFlag       string
 	createSecretsFlag  bool
+	createSandboxFlag  bool
+	createIsolatedFlag bool
 )
 
 // splitList parses a comma-separated flag into trimmed, non-empty items.
@@ -154,12 +156,18 @@ image run host-only).`,
 			}
 		}
 
+		isolation := isolationProfile(createSandboxFlag, createIsolatedFlag)
+		if isolation != "" && createSecretsFlag {
+			return fmt.Errorf("--secrets and --sandbox/--isolated are mutually exclusive (a sandbox must not carry your identity)")
+		}
+
 		entry := domain.IndexWorkspace{
 			Name: name, Root: root, Mount: createMountFlag,
-			Shell:   shellCommand(createShellFlag),
-			Ports:   splitList(createPortFlag),
-			Up:      shellCommand(createUpFlag),
-			Secrets: createSecretsFlag,
+			Shell:     shellCommand(createShellFlag),
+			Ports:     splitList(createPortFlag),
+			Up:        shellCommand(createUpFlag),
+			Secrets:   createSecretsFlag,
+			Isolation: isolation,
 		}
 		if image != "" {
 			entry.Images = append([]string{image}, splitList(createWithFlag)...)
@@ -283,5 +291,7 @@ func init() {
 	createCmd.Flags().StringVar(&createPortFlag, "port", "", "ports to publish to the host (comma-separated, 'host:container' or 'port')")
 	createCmd.Flags().StringVar(&createUpFlag, "up", "", "dev command 'neonroot up' runs in the container (e.g. 'npm run dev')")
 	createCmd.Flags().BoolVar(&createSecretsFlag, "secrets", false, "inject identity on load (bananenv env + ssh agent + gitconfig; opt-in, ephemeral)")
+	createCmd.Flags().BoolVar(&createSandboxFlag, "sandbox", false, "lock the container down for agent/untrusted use (drop caps, no-new-privs, limits; network on)")
+	createCmd.Flags().BoolVar(&createIsolatedFlag, "isolated", false, "sandbox + no network (for untrusted code)")
 	rootCmd.AddCommand(createCmd)
 }

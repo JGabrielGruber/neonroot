@@ -24,6 +24,7 @@ type wsRow struct {
 	loaded          bool
 	report          workspace.Report // valid when loaded
 	images          []string
+	isolation       string // "", "sandbox", or "isolated"
 }
 
 type imgRow struct {
@@ -87,7 +88,7 @@ func gather(ctx context.Context, d Deps) snapshot {
 			if idx, ierr := vault.ReadIndex(v.Path); ierr == nil {
 				row.revision = idx.Revision
 				for _, w := range idx.Workspaces {
-					wr := wsRow{name: w.Name, vaultName: v.Name, images: w.Images}
+					wr := wsRow{name: w.Name, vaultName: v.Name, images: w.Images, isolation: w.Isolation}
 					if r, ok := repByName[w.Name]; ok && r.Workspace.SourceVault == v.Name {
 						wr.loaded = true
 						wr.report = r

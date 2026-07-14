@@ -18,6 +18,8 @@ var (
 	loadReloadImage bool
 	loadSecrets     bool
 	loadEnvFile     string
+	loadSandbox     bool
+	loadIsolated    bool
 )
 
 var loadCmd = &cobra.Command{
@@ -54,6 +56,7 @@ already-loaded workspace is reused; --clean re-clones fresh.`,
 			ReloadImage: loadReloadImage,
 			Secrets:     loadSecrets,
 			EnvFile:     loadEnvFile,
+			Isolation:   isolationProfile(loadSandbox, loadIsolated),
 		}
 		if !loadNoSession {
 			tmux := &session.Tmux{Runner: app.Runner}
@@ -92,5 +95,7 @@ func init() {
 	loadCmd.Flags().BoolVar(&loadReloadImage, "reload-image", false, "re-load image data from the vault even if already in the store")
 	loadCmd.Flags().BoolVar(&loadSecrets, "secrets", false, "force identity passthrough on for this load (bananenv env + ssh agent + gitconfig)")
 	loadCmd.Flags().StringVar(&loadEnvFile, "env-file", "", "inject extra env vars from a dotenv file into the container (tmpfs, wiped on stop)")
+	loadCmd.Flags().BoolVar(&loadSandbox, "sandbox", false, "force-sandbox this load (overrides the stored setting)")
+	loadCmd.Flags().BoolVar(&loadIsolated, "isolated", false, "force-isolate this load: sandbox + no network")
 	rootCmd.AddCommand(loadCmd)
 }

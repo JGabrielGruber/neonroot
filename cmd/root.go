@@ -144,6 +144,19 @@ func (a *App) requireAvailable(r domain.Vault) error {
 	return nil
 }
 
+// isolationProfile resolves the --sandbox/--isolated flag pair to a stored
+// profile name; --isolated is the stronger tier and wins. Empty = no sandboxing.
+func isolationProfile(sandbox, isolated bool) string {
+	switch {
+	case isolated:
+		return domain.IsolationIsolated
+	case sandbox:
+		return domain.IsolationSandbox
+	default:
+		return ""
+	}
+}
+
 // catalog returns a kind-agnostic catalog reader/writer: local vaults resolve
 // to their on-drive index.toml, remote vaults to their _catalog.git cloned into
 // the tmpfs cache.

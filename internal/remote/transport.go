@@ -2,6 +2,7 @@ package remote
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/JGabrielGruber/neonroot/internal/platform"
@@ -52,4 +53,31 @@ func (t Transport) Fetch(ctx context.Context, remoteRel, localDst string) error 
 func (t Transport) Upload(ctx context.Context, localSrc, remoteRel string) error {
 	_, err := t.Runner.Run(ctx, "scp", t.scpArgs(localSrc, t.scpRemote(remoteRel))...)
 	return err
+}
+
+// sshArgs prepends the port flag (ssh uses -p, unlike scp's -P) when set.
+func (t Transport) sshArgs(remoteCmd string) []string {
+	var args []string
+	if t.Addr.Port != "" {
+		args = append(args, "-p", t.Addr.Port)
+	}
+	return append(args, t.Addr.Target(), remoteCmd)
+}
+
+// InitBare creates a bare git repo at a vault-relative remote path and pins its
+// default branch, so a later clone checks out main. It is idempotent — re-running
+// on an existing repo is harmless — which lets the catalog/workspace repos be
+// created lazily on first write.
+func (t Transport) InitBare(ctx context.Context, remoteRel string) error {
+	p := shellArg(t.Addr.RemotePath(remoteRel))
+	// "main" mirrors git.defaultBranch (unexported there); keep them in sync.
+	remoteCmd := fmt.Sprintf("git init --bare -q %s && git --git-dir=%s symbolic-ref HEAD refs/heads/main", p, p)
+	_, err := t.Runner.Run(ctx, "ssh", t.sshArgs(remoteCmd)...)
+	return err
+}
+
+// shellArg single-quotes a string for safe interpolation into a remote shell
+// command (vault paths are user-controlled config).
+func shellArg(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

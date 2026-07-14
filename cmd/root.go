@@ -147,7 +147,7 @@ func (a *App) requireAvailable(r domain.Vault) error {
 // to their on-drive index.toml, remote vaults to their _catalog.git cloned into
 // the tmpfs cache.
 func (a *App) catalog() vault.Catalog {
-	return vault.Catalog{Git: &git.Git{Runner: a.Runner}, CacheDir: a.Paths.Cache}
+	return vault.Catalog{Git: &git.Git{Runner: a.Runner}, Runner: a.Runner, CacheDir: a.Paths.Cache}
 }
 
 // podman builds the Podman adapter with storage pinned to tmpfs, creating the

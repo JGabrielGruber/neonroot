@@ -13,6 +13,7 @@ import (
 
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/git"
+	"github.com/JGabrielGruber/neonroot/internal/remote"
 	"github.com/JGabrielGruber/neonroot/internal/template"
 	"github.com/JGabrielGruber/neonroot/internal/vault"
 )
@@ -79,7 +80,8 @@ image run host-only).`,
 		}
 		defer lock.Unlock()
 
-		idx, err := vault.ReadIndex(target.Path)
+		cat := app.catalog()
+		idx, err := cat.Read(cmd.Context(), target)
 		if errors.Is(err, fs.ErrNotExist) {
 			idx = vault.NewIndex()
 		} else if err != nil {
@@ -112,10 +114,27 @@ image run host-only).`,
 			return err
 		}
 
+		// Seed the workspace's bare repo. Local: create it on the drive and push
+		// the initial commit. Remote: init it on the server over ssh, then push
+		// the initial commit to its ssh URL.
 		root := filepath.Join("workspaces", name+".git")
-		bare := filepath.Join(target.Path, root)
-		if err := g.SeedContent(cmd.Context(), bare, content); err != nil {
-			return err
+		if target.IsRemote() {
+			addr, err := remote.Parse(target.Remote)
+			if err != nil {
+				return err
+			}
+			t := remote.Transport{Runner: app.Runner, Addr: addr}
+			if err := t.InitBare(cmd.Context(), root); err != nil {
+				return err
+			}
+			if err := g.SeedPush(cmd.Context(), addr.SSHURL(root), content); err != nil {
+				return err
+			}
+		} else {
+			bare := filepath.Join(target.Path, root)
+			if err := g.SeedContent(cmd.Context(), bare, content); err != nil {
+				return err
+			}
 		}
 
 		entry := domain.IndexWorkspace{
@@ -131,7 +150,7 @@ image run host-only).`,
 		}
 		idx.Workspaces = append(idx.Workspaces, entry)
 		vault.Bump(idx)
-		if err := vault.WriteIndex(target.Path, idx); err != nil {
+		if err := cat.Write(cmd.Context(), target, idx); err != nil {
 			return err
 		}
 
@@ -156,7 +175,7 @@ func seedFrom(ctx context.Context, g *git.Git, ref, defaultVault, content string
 	if err := app.requireAvailable(src); err != nil {
 		return "", err
 	}
-	sidx, err := vault.ReadIndex(src.Path)
+	sidx, err := app.catalog().Read(ctx, src)
 	if err != nil {
 		return "", err
 	}
@@ -164,9 +183,17 @@ func seedFrom(ctx context.Context, g *git.Git, ref, defaultVault, content string
 	if !ok {
 		return "", fmt.Errorf("%w: %q in vault %q", domain.ErrWorkspaceNotFound, wsName, src.Name)
 	}
-	// Clone the source bare repo into content, then drop its history so the new
-	// workspace starts fresh from the source's current files.
-	if err := g.Clone(ctx, filepath.Join(src.Path, entry.Root), content); err != nil {
+	// Clone the source bare repo (local path or ssh URL) into content, then drop
+	// its history so the new workspace starts fresh from the source's files.
+	origin := filepath.Join(src.Path, entry.Root)
+	if src.IsRemote() {
+		addr, err := remote.Parse(src.Remote)
+		if err != nil {
+			return "", err
+		}
+		origin = addr.SSHURL(entry.Root)
+	}
+	if err := g.Clone(ctx, origin, content); err != nil {
 		return "", err
 	}
 	return entry.PrimaryImage(), os.RemoveAll(filepath.Join(content, ".git"))

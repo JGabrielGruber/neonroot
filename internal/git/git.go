@@ -50,18 +50,26 @@ func (g *Git) InitBare(ctx context.Context, barePath string) error {
 	return err
 }
 
-// SeedContent turns a directory of files into the initial commit of a bare repo:
-// it inits a throwaway working tree in contentDir, commits everything on the
-// default branch, and pushes to barePath. contentDir is expected to be temporary.
+// SeedContent turns a directory of files into the initial commit of a local bare
+// repo: it creates the bare repo and pushes contentDir's files as its first
+// commit. contentDir is expected to be temporary.
 func (g *Git) SeedContent(ctx context.Context, barePath, contentDir string) error {
 	if err := g.InitBare(ctx, barePath); err != nil {
 		return err
 	}
+	return g.SeedPush(ctx, barePath, contentDir)
+}
+
+// SeedPush commits everything in contentDir on the default branch and pushes it
+// to an already-existing bare repo at pushTarget (a local path or an ssh URL).
+// The caller ensures the bare repo exists — locally via InitBare, remotely via
+// the ssh transport's InitBare — so this works identically for both.
+func (g *Git) SeedPush(ctx context.Context, pushTarget, contentDir string) error {
 	steps := [][]string{
 		{"init", "-q", "-b", defaultBranch},
 		{"add", "-A"},
 		{"-c", "user.name=neonroot", "-c", "user.email=neonroot@localhost", "commit", "-q", "-m", "initial"},
-		{"push", "-q", barePath, defaultBranch},
+		{"push", "-q", pushTarget, defaultBranch},
 	}
 	for _, s := range steps {
 		if _, err := g.run(ctx, contentDir, s...); err != nil {
@@ -69,6 +77,16 @@ func (g *Git) SeedContent(ctx context.Context, barePath, contentDir string) erro
 		}
 	}
 	return nil
+}
+
+// CloneCatalog clones a repo with no payload-specific flags, tolerating an empty
+// (freshly-init'd) repo so a vault's _catalog.git can be read/updated before its
+// first commit exists. Unlike Clone (tuned for workspace payloads with
+// --single-branch --branch main), a plain clone of an empty bare repo succeeds
+// with an empty working tree.
+func (g *Git) CloneCatalog(ctx context.Context, origin, dst string) error {
+	_, err := g.run(ctx, "", "clone", "-q", origin, dst)
+	return err
 }
 
 // Clone clones a bare repo into dst over the filesystem. --no-hardlinks makes the

@@ -98,6 +98,31 @@ Because the container carries its own sshd, NeonRoot's ssh/rsync integration tes
 *inside* it without touching the host's ssh config. (Dogfooding this way already caught a
 real catalog-over-ssh bug the mocked unit tests missed.)
 
+## Agent sandboxes
+
+The same throwaway-container loop is a **safe, disposable environment for an AI agent** —
+NeonRoot's take on the "agent substrate" the cloud CDEs chased, but local, offline, and
+sovereign. Where a dev workspace *trusts you*, a sandbox *distrusts the code*: no host
+identity, dropped capabilities, resource limits, and (optionally) no network.
+
+```bash
+# create a throwaway box, run a command in it, propagate the exit code, reap it:
+neonroot spawn --image ci --sandbox --seed . -- go test ./...
+
+# --isolated also cuts the network (for untrusted code); --keep retains the box to review:
+neonroot spawn --image ci --isolated -- ./suspicious-build.sh
+```
+
+- `--sandbox` = no `SSH_AUTH_SOCK`/gitconfig, `--cap-drop=ALL`, `--security-opt=no-new-privileges`,
+  memory + pids limits — **network stays up** so builds/tests can fetch deps.
+- `--isolated` = sandbox **+ `--network=none`**, for running code you don't trust.
+- Mutually exclusive with `--secrets` (a sandbox must not carry your identity). Also a
+  persistent trait: `create/set --sandbox|--isolated`, shown as a marker in `list`/`status`/TUI.
+
+**Honest boundary:** rootless podman + dropped caps + no-new-privs + no-network is a *strong*
+isolation boundary — defense in depth — **not a VM**. Don't treat an agent box as a hermetic
+security guarantee for actively hostile code.
+
 ## How it works
 
 ```
@@ -115,8 +140,8 @@ workspace templates**, not the binary.
 ## Commands
 
 **Workspaces** (the everyday surface):
-`create` · `load` · `attach` · `up` · `run` · `logs` · `commit` · `sync` · `status` ·
-`snapshot` · `set` · `stop` · `rm` · `list` · `path`/`code` · `doctor` · `guard`
+`create` · `spawn` · `load` · `attach` · `up` · `run` · `logs` · `commit` · `sync` ·
+`status` · `snapshot` · `set` · `stop` · `rm` · `list` · `path`/`code` · `doctor` · `guard`
 
 `create` takes `--image`, `--with postgres,redis` (sidecars), `--port 3000`
 (publish to host), `--up "npm run dev"` (dev command for `neonroot up`), and

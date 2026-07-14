@@ -69,6 +69,27 @@ Both ride the `domain.SessionOpts{EnvFile, Mounts}` added to `runtime.Run`/`Star
 the container then authenticates as you for its lifetime — on SELinux-enforcing hosts the
 agent socket may need `--security-opt label=disable` (a target-hardware item).
 
+## Isolation (agent sandboxes)
+
+A workspace can invert the trusting-dev defaults for untrusted/agent use
+(`create/set/load --sandbox|--isolated`; `spawn` for a one-shot). `domain.Sandbox` holds
+the *intent* (domain stays argv-free); `domain.SandboxFor(profile)` maps a profile to a
+preset; `runtime` translates it to podman flags:
+- `sandbox` → `--cap-drop=ALL --security-opt=no-new-privileges --memory=2g --pids-limit=512`
+  (network stays up so builds/tests fetch deps),
+- `isolated` → the above **+ `--network=none`**.
+
+It rides the `domain.SessionOpts.Sandbox` field into `runtime.Run`. The loader **refuses to
+combine it with secrets** — a sandbox that mounts your ssh agent defeats the purpose — and
+skips all identity/env injection when a profile is set. `spawn` composes the existing
+seams (`createWorkspace` → `Loader` → a headless `podman exec` → `stopWorkspace`/
+`removeWorkspace` reap) and propagates the command's exit code via `exitError`.
+
+Deliberately **not** a VM: no `--read-only` rootfs yet (image-brittle), no seccomp/userns
+tuning. This is defense-in-depth (rootless podman + dropped caps + no-new-privs + optional
+no-network), not a hermetic guarantee for actively hostile code — stated plainly so it
+isn't over-trusted. Read-only + tmpfs and finer profiles are the follow-on.
+
 ## Path layout (the SD-write guarantee)
 
 All resolution is centralized in `internal/platform/paths.go`.

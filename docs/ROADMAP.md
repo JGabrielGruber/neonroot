@@ -79,6 +79,16 @@ cloud. Take the inverse, uncontested position: **local, disposable, git-native s
 for AI coding agents.** A workspace is already a cheap throwaway clone-in-a-container —
 spin up per task, commit the good ones, `rm` the rest, nothing leaves the box.
 
-- Disposable per-task workspaces; a fleet view; agent-isolation defaults.
+- ✅ **Sandbox profiles + `spawn`** *(slice 1, shipped)* — the defaults inversion: where a
+  dev workspace trusts you, an agent box distrusts the code. `--sandbox` (no host identity,
+  `--cap-drop=ALL`, `--security-opt=no-new-privileges`, memory/pids limits; network on for
+  deps) and `--isolated` (adds `--network=none`) as a per-workspace trait or a `load`
+  override. `neonroot spawn --image <img> [--seed .] [--sandbox|--isolated] -- <cmd>`
+  creates a throwaway box, runs the command (exit code propagated), and reaps it — `--keep`
+  to retain and review. Validated by dogfooding against the `ci` image.
+- **Fleet + machine-readable surface** *(next)* — many concurrent agent boxes, a `ps`/TUI
+  fleet view and reaping; a `--json` status so an SDK can drive it.
+- **Isolation hardening** *(next)* — `--read-only` rootfs + tmpfs mounts, seccomp/userns
+  knobs, per-profile resource tuning.
 - Positioning: *cloud agent platforms rent you sandboxes; NeonRoot gives you an
   unlimited local fleet you own — offline, disposable, sovereign.*

@@ -5,6 +5,19 @@ deliberately (see `docs/VISION.md` for where it's going).
 
 ## Unreleased
 
+### E4 — agent substrate (slice 1)
+
+- **Sandbox profiles** — the defaults inversion for untrusted/agent workloads:
+  `--sandbox` (no host identity, `--cap-drop=ALL`, `--security-opt=no-new-privileges`,
+  `--memory`/`--pids-limit`; network on) and `--isolated` (adds `--network=none`).
+  A persistent workspace trait (`create/set --sandbox|--isolated`) or a `load`
+  override, shown as a marker in `list`/`status`/TUI. Mutually exclusive with
+  `--secrets`. **Not a VM** — strong isolation, not a hermetic guarantee (documented).
+- **`spawn`** — `neonroot spawn --image <img> [--seed .] [--sandbox|--isolated]
+  -- <cmd>`: create a throwaway workspace, run the command (exit code propagated),
+  and reap it. `--keep` retains it for review ("commit the good runs, `rm` the rest").
+  Validated end-to-end by dogfooding against the `ci` image.
+
 ### dogfooding & CI
 
 - **`ci` image template** — alpine + Go + git + rsync + a self-contained

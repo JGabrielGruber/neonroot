@@ -68,6 +68,31 @@ neonroot stop work && neonroot rm work
 `list`/`status` show a `(sandbox)`/`(isolated)` marker so you always know a box is locked
 down. This is the **"commit the good runs, `rm` the rest"** model.
 
+### Driving a fleet programmatically
+
+Each `spawn` is uniquely named and independent, so you can run many at once. To see and
+manage them from code:
+
+```bash
+neonroot list --json               # every workspace as JSON (name, vault, state, loaded, images, isolation)
+neonroot list --loaded --json      # just the running fleet
+neonroot reap box-1 box-2          # stop + rm specific boxes
+neonroot reap --all                # tear the whole loaded fleet down
+```
+
+`list --json` is the surface to parse; `run <ws> -- <cmd>`'s exit code is the signal;
+`reap` is the cleanup. A crashed `spawn` that didn't self-reap is cleaned by `reap`.
+
+### Harder isolation
+
+Add `--read-only` (to `spawn`/`load`) for a read-only rootfs — tmpfs is auto-mounted on
+`/tmp`,`/run` so scratch writes still work. Best for *running* untrusted code; a read-only
+root breaks build caches (go/npm), so don't pair it with a build step.
+
+```bash
+neonroot spawn --image ci --isolated --read-only -- ./run-untrusted
+```
+
 ### Honest boundary — NOT a VM
 
 Rootless podman + dropped caps + no-new-privs + optional no-network is **strong

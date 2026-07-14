@@ -141,7 +141,8 @@ workspace templates**, not the binary.
 
 **Workspaces** (the everyday surface):
 `create` · `spawn` · `load` · `attach` · `up` · `run` · `logs` · `commit` · `sync` ·
-`status` · `snapshot` · `set` · `stop` · `rm` · `list` · `path`/`code` · `doctor` · `guard`
+`status` · `snapshot` · `set` · `stop` · `rm` · `reap` · `list` (`--json`/`--loaded`) ·
+`path`/`code` · `doctor` · `guard`
 
 `create` takes `--image`, `--with postgres,redis` (sidecars), `--port 3000`
 (publish to host), `--up "npm run dev"` (dev command for `neonroot up`), and

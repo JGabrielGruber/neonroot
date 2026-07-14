@@ -86,9 +86,13 @@ spin up per task, commit the good ones, `rm` the rest, nothing leaves the box.
   override. `neonroot spawn --image <img> [--seed .] [--sandbox|--isolated] -- <cmd>`
   creates a throwaway box, runs the command (exit code propagated), and reaps it — `--keep`
   to retain and review. Validated by dogfooding against the `ci` image.
-- **Fleet + machine-readable surface** *(next)* — many concurrent agent boxes, a `ps`/TUI
-  fleet view and reaping; a `--json` status so an SDK can drive it.
-- **Isolation hardening** *(next)* — `--read-only` rootfs + tmpfs mounts, seccomp/userns
-  knobs, per-profile resource tuning.
+- ✅ **Fleet + machine-readable surface** *(slice 2, shipped)* — concurrent agent boxes
+  (each `spawn` is uniquely named and coexists); `list --json` gives an SDK a drivable
+  surface, `list --loaded` shows the running fleet, and `reap <names>|--all` tears the fleet
+  down in one go.
+- ✅ **Isolation hardening: `--read-only`** *(slice 2, shipped)* — `load`/`spawn --read-only`
+  gives a read-only rootfs (tmpfs auto-mounted on /tmp,/run); composes with a profile.
+- **More hardening** *(next)* — seccomp/userns knobs, per-profile resource tuning, a TUI
+  fleet pane.
 - Positioning: *cloud agent platforms rent you sandboxes; NeonRoot gives you an
   unlimited local fleet you own — offline, disposable, sovereign.*

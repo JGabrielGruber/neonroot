@@ -5,6 +5,15 @@ deliberately (see `docs/VISION.md` for where it's going).
 
 ## Unreleased
 
+### E4 — agent substrate (slice 2)
+
+- **Fleet, machine-readable** — `list --json` emits a drivable array for agents/SDKs;
+  `list --loaded` shows only the running fleet; `reap <names>|--all` stops+rms
+  loaded workspaces in one go (throwaway/kept-box cleanup).
+- **`--read-only` hardening** — `load`/`spawn --read-only` runs with a read-only
+  rootfs (tmpfs on /tmp,/run); composes with `--sandbox`/`--isolated`. Best for
+  running untrusted code, not building.
+
 ### E4 — agent substrate (slice 1)
 
 - **Sandbox profiles** — the defaults inversion for untrusted/agent workloads:

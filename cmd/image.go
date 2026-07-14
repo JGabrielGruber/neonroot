@@ -172,17 +172,36 @@ func buildRemoteImage(cmd *cobra.Command, v domain.Vault, name string, pod *runt
 	if err := pod.Build(cmd.Context(), ref, buildCtx); err != nil {
 		return err
 	}
-	localTar := filepath.Join(buildCtx, "image.tar")
-	app.UI.Step("saving image data")
-	if err := pod.Save(cmd.Context(), ref, localTar); err != nil {
-		return err
-	}
-	app.UI.Step(fmt.Sprintf("uploading image data to %q", v.Name))
-	if err := t.Upload(cmd.Context(), localTar, path.Join("images", name, "image.tar")); err != nil {
+	if err := saveImageToRemote(cmd, v, name, ref, pod); err != nil {
 		return err
 	}
 	app.UI.Success(fmt.Sprintf("built and stored image %q in vault %q", name, v.Name))
 	return nil
+}
+
+// saveImageToRemote saves a built/committed image ref to a tmpfs tar and uploads
+// it to the remote vault's images/<name>/image.tar over the transport (scp/rsync).
+func saveImageToRemote(cmd *cobra.Command, v domain.Vault, name, ref string, pod *runtime.Podman) error {
+	t, err := app.transport(v)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(app.Paths.Cache, "imgsave")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	localTar := filepath.Join(dir, name+".tar")
+	defer os.Remove(localTar)
+
+	app.UI.Step("saving image data")
+	if err := pod.Save(cmd.Context(), ref, localTar); err != nil {
+		return err
+	}
+	if err := t.Mkdir(cmd.Context(), path.Join("images", name)); err != nil {
+		return err
+	}
+	app.UI.Step(fmt.Sprintf("uploading image data to %q", v.Name))
+	return t.Upload(cmd.Context(), localTar, path.Join("images", name, "image.tar"))
 }
 
 var imageLsCmd = &cobra.Command{
@@ -269,16 +288,9 @@ never removes a shared image.`,
 		if err := app.requireAvailable(v); err != nil {
 			return err
 		}
-		if v.IsRemote() {
-			return errRemoteImageUnsupported("rm")
-		}
-		dir := vault.ImageDir(v.Path, name)
-		if _, err := os.Stat(dir); err != nil {
-			return fmt.Errorf("no image %q in vault %q", name, v.Name)
-		}
 
-		// Warn about workspaces that still reference it.
-		if idx, err := vault.ReadIndex(v.Path); err == nil {
+		// Warn about workspaces that still reference it (from the catalog, either kind).
+		if idx, err := app.catalog().Read(cmd.Context(), v); err == nil {
 			for _, w := range idx.Workspaces {
 				for _, img := range w.Images {
 					if img == name {
@@ -288,9 +300,25 @@ never removes a shared image.`,
 			}
 		}
 
-		if err := os.RemoveAll(dir); err != nil {
-			return err
+		if v.IsRemote() {
+			t, err := app.transport(v)
+			if err != nil {
+				return err
+			}
+			app.UI.Step(fmt.Sprintf("removing image %q from %q", name, v.Name))
+			if err := t.RemoveAll(cmd.Context(), path.Join("images", name)); err != nil {
+				return err
+			}
+		} else {
+			dir := vault.ImageDir(v.Path, name)
+			if _, err := os.Stat(dir); err != nil {
+				return fmt.Errorf("no image %q in vault %q", name, v.Name)
+			}
+			if err := os.RemoveAll(dir); err != nil {
+				return err
+			}
 		}
+
 		// Best-effort removal from the tmpfs store.
 		if pod, err := app.podman(); err == nil && pod.Available() {
 			_, _ = app.Runner.Run(cmd.Context(), "podman",
@@ -324,9 +352,6 @@ vault. This is how inside-container changes become durable and reproducible.`,
 		if err := app.requireAvailable(v); err != nil {
 			return err
 		}
-		if v.IsRemote() {
-			return errRemoteImageUnsupported("snapshot")
-		}
 		pod, err := app.podman()
 		if err != nil {
 			return err
@@ -340,6 +365,14 @@ vault. This is how inside-container changes become durable and reproducible.`,
 		app.UI.Step(fmt.Sprintf("committing container of %q", wsName))
 		if err := pod.Commit(cmd.Context(), ws.ContainerID, ref); err != nil {
 			return err
+		}
+
+		if v.IsRemote() {
+			if err := saveImageToRemote(cmd, v, image, ref, pod); err != nil {
+				return err
+			}
+			app.UI.Success(fmt.Sprintf("snapshotted %q into image %q in vault %q", wsName, image, v.Name))
+			return nil
 		}
 		app.UI.Step(fmt.Sprintf("saving image %q into the vault", image))
 		if err := pod.Save(cmd.Context(), ref, vault.ImageTarPath(v.Path, image)); err != nil {
@@ -436,7 +469,7 @@ stored image data, and updates every workspace that references it.`,
 // vaults, so it fails clearly instead of silently writing to an empty path.
 func errRemoteImageUnsupported(op string) error {
 	return fmt.Errorf("'image %s' is not yet supported for remote vaults — "+
-		"do it on a machine with the vault local, or use image create/build/ls", op)
+		"do it on a machine with the vault local (create/build/ls/snapshot/rm do work remotely)", op)
 }
 
 // podBaseArgs exposes the storage-pinning args for ad-hoc podman calls.

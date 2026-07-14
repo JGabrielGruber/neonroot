@@ -64,6 +64,10 @@ func TestTransport_DirsInitAndMkdir(t *testing.T) {
 		"ssh -p 2222 git@host mkdir -p '/srv/vault/images'",
 		"ssh -p 2222 git@host git init --bare -q '/srv/vault/_catalog.git' && git --git-dir='/srv/vault/_catalog.git' symbolic-ref HEAD refs/heads/main",
 	}
+	if err := tr.RemoveAll(ctx, "images/dev"); err != nil {
+		t.Fatal(err)
+	}
+	want = append(want, "ssh -p 2222 git@host rm -rf '/srv/vault/images/dev'")
 	for i, w := range want {
 		if got := rec.Lines()[i]; got != w {
 			t.Errorf("line %d:\n got %q\nwant %q", i, got, w)

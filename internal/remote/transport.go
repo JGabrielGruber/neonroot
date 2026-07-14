@@ -134,6 +134,14 @@ func (t Transport) sshArgs(remoteCmd string) []string {
 	return append(args, t.Addr.Target(), remoteCmd)
 }
 
+// RemoveAll deletes a vault-relative remote path (recursively) over ssh — the
+// remote counterpart of os.RemoveAll, e.g. dropping an image's images/<name> dir.
+func (t Transport) RemoveAll(ctx context.Context, remoteRel string) error {
+	_, err := t.Runner.Run(ctx, "ssh",
+		t.sshArgs("rm -rf "+shellArg(t.Addr.RemotePath(remoteRel)))...)
+	return err
+}
+
 // InitBare creates a bare git repo at a vault-relative remote path and pins its
 // default branch, so a later clone checks out main. It is idempotent — re-running
 // on an existing repo is harmless — which lets the catalog/workspace repos be

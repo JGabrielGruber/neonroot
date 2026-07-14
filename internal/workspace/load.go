@@ -77,6 +77,9 @@ type Loader struct {
 	// Isolation overrides the workspace's stored sandbox profile for this load
 	// (the `load --sandbox`/`--isolated` flags); "" uses the stored setting.
 	Isolation string
+	// ReadOnly hardens this load with a read-only rootfs (the `--read-only`
+	// flag); composes with any profile, or applies alone.
+	ReadOnly bool
 	// NoContainer forces host-only even when a workspace declares an image.
 	NoContainer bool
 	// Clean discards an already-loaded clone (uncommitted work included) and
@@ -186,11 +189,16 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 	containerized := false
 	if len(entry.Images) > 0 && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
 		var opts domain.SessionOpts
-		if sb, sandboxed := domain.SandboxFor(isolation); sandboxed {
+		sb, sandboxed := domain.SandboxFor(isolation)
+		if l.ReadOnly {
+			sb.ReadOnly = true
+			sandboxed = true // --read-only alone still builds a (minimal) sandbox
+		}
+		if sandboxed {
 			// A sandbox must not carry your identity — skip all secrets injection.
 			opts.Sandbox = &sb
 			if entry.Secrets || l.Secrets || l.EnvFile != "" {
-				l.UI.Warn(fmt.Sprintf("%q is %s — skipping secrets/identity injection", name, isolation))
+				l.UI.Warn(fmt.Sprintf("%q is sandboxed — skipping secrets/identity injection", name))
 			}
 		} else {
 			o, warns, serr := l.buildSecrets(ctx, entry, name)

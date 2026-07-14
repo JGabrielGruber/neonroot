@@ -28,6 +28,7 @@ type Sandbox struct {
 	NoNetwork bool   // cut the network (untrusted code)
 	DropCaps  bool   // drop all Linux capabilities
 	NoNewPriv bool   // forbid privilege escalation (setuid, etc.)
+	ReadOnly  bool   // read-only rootfs (with tmpfs on /tmp,/run,…); best for run-not-build
 	Memory    string // memory cap, e.g. "2g"; "" leaves it unset
 	PidsLimit int    // max processes; 0 leaves it unset
 }

@@ -23,6 +23,7 @@ var (
 	spawnSeedFlag     string
 	spawnSandboxFlag  bool
 	spawnIsolatedFlag bool
+	spawnReadOnlyFlag bool
 	spawnKeepFlag     bool
 )
 
@@ -103,10 +104,11 @@ is generated). Requires --image (a container to run in).`,
 		}
 		loader := &workspace.Loader{
 			Paths: app.Paths, UI: app.UI,
-			Git:     &git.Git{Runner: app.Runner},
-			Catalog: app.catalog(),
-			Runner:  app.Runner,
-			Runtime: pod,
+			Git:      &git.Git{Runner: app.Runner},
+			Catalog:  app.catalog(),
+			Runner:   app.Runner,
+			Runtime:  pod,
+			ReadOnly: spawnReadOnlyFlag,
 		}
 		ws, err := loader.Load(target, name)
 		if err != nil {
@@ -185,6 +187,7 @@ func init() {
 	spawnCmd.Flags().StringVar(&spawnSeedFlag, "seed", "", "seed the workspace from a host directory")
 	spawnCmd.Flags().BoolVar(&spawnSandboxFlag, "sandbox", false, "sandbox the container (no identity, dropped caps, limits; network on)")
 	spawnCmd.Flags().BoolVar(&spawnIsolatedFlag, "isolated", false, "sandbox + no network (untrusted code)")
+	spawnCmd.Flags().BoolVar(&spawnReadOnlyFlag, "read-only", false, "read-only rootfs (tmpfs on /tmp,/run); best for running, not building")
 	spawnCmd.Flags().BoolVar(&spawnKeepFlag, "keep", false, "do not reap the workspace after the command (inspect/commit it)")
 	rootCmd.AddCommand(spawnCmd)
 }

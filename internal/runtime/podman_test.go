@@ -131,6 +131,18 @@ func TestPodman_SandboxFlags(t *testing.T) {
 	if got := rec.Lines()[0]; got != want {
 		t.Errorf("sandbox:\n got %q\nwant %q", got, want)
 	}
+
+	// read-only hardening composes onto a profile.
+	rec = runnertest.New()
+	rec.Stdout["podman"] = "cid\n"
+	ro, _ := domain.SandboxFor(domain.IsolationIsolated)
+	ro.ReadOnly = true
+	if _, err := newPodman(rec).Start(context.Background(), "img", "nr-agent", "/tmp/ws", "/workspace", nil, domain.SessionOpts{Sandbox: &ro}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.Lines()[0]; !strings.Contains(got, "--read-only --read-only-tmpfs=true") {
+		t.Errorf("read-only flags missing: %q", got)
+	}
 }
 
 func TestPodman_ExecArgs(t *testing.T) {

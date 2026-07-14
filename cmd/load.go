@@ -20,6 +20,7 @@ var (
 	loadEnvFile     string
 	loadSandbox     bool
 	loadIsolated    bool
+	loadReadOnly    bool
 )
 
 var loadCmd = &cobra.Command{
@@ -57,6 +58,7 @@ already-loaded workspace is reused; --clean re-clones fresh.`,
 			Secrets:     loadSecrets,
 			EnvFile:     loadEnvFile,
 			Isolation:   isolationProfile(loadSandbox, loadIsolated),
+			ReadOnly:    loadReadOnly,
 		}
 		if !loadNoSession {
 			tmux := &session.Tmux{Runner: app.Runner}
@@ -97,5 +99,6 @@ func init() {
 	loadCmd.Flags().StringVar(&loadEnvFile, "env-file", "", "inject extra env vars from a dotenv file into the container (tmpfs, wiped on stop)")
 	loadCmd.Flags().BoolVar(&loadSandbox, "sandbox", false, "force-sandbox this load (overrides the stored setting)")
 	loadCmd.Flags().BoolVar(&loadIsolated, "isolated", false, "force-isolate this load: sandbox + no network")
+	loadCmd.Flags().BoolVar(&loadReadOnly, "read-only", false, "read-only rootfs (tmpfs on /tmp,/run); best for running, not building")
 	rootCmd.AddCommand(loadCmd)
 }

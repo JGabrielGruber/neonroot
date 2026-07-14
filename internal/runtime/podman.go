@@ -59,6 +59,11 @@ func sandboxArgs(s *domain.Sandbox) []string {
 	if s.NoNewPriv {
 		args = append(args, "--security-opt=no-new-privileges")
 	}
+	if s.ReadOnly {
+		// read-only rootfs, with tmpfs auto-mounted on /tmp, /run, /var/tmp so
+		// normal scratch writes still work.
+		args = append(args, "--read-only", "--read-only-tmpfs=true")
+	}
 	if s.Memory != "" {
 		args = append(args, "--memory="+s.Memory)
 	}

@@ -57,7 +57,7 @@ func TestPodman_RunBuildsArgs(t *testing.T) {
 		t.Errorf("id = %q, want abc123", id)
 	}
 	want := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers " +
-		"run -d --pull=never --name nr-webapp -v /tmp/nr/workspaces/webapp:/workspace -w /workspace " +
+		"run -d --pull=never --replace --name nr-webapp -v /tmp/nr/workspaces/webapp:/workspace -w /workspace " +
 		"localhost/arch-minimal sleep infinity"
 	if got := rec.Lines()[0]; got != want {
 		t.Errorf("run args:\n got %q\nwant %q", got, want)
@@ -71,7 +71,7 @@ func TestPodman_StartKeepsAlive(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers " +
-		"run -d --pull=never --name nr-app -v /tmp/nr/workspaces/app:/code -w /code " +
+		"run -d --pull=never --replace --name nr-app -v /tmp/nr/workspaces/app:/code -w /code " +
 		"-p 3000:3000 -p 5432:5432 img sleep infinity"
 	if got := rec.Lines()[0]; got != want {
 		t.Errorf("start args:\n got %q\nwant %q", got, want)
@@ -93,7 +93,7 @@ func TestPodman_StartWithSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers " +
-		"run -d --pull=never --name nr-app -v /tmp/ws:/workspace -w /workspace " +
+		"run -d --pull=never --replace --name nr-app -v /tmp/ws:/workspace -w /workspace " +
 		"-v /run/user/1000/ssh-agent.sock:/ssh-agent -v /home/me/.gitconfig:/root/.gitconfig:ro " +
 		"--env-file /run/user/1000/nr/secrets/app.env img sleep infinity"
 	if got := rec.Lines()[0]; got != want {
@@ -171,13 +171,13 @@ func TestPodman_StartPod(t *testing.T) {
 	base := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers "
 	lines := rec.Lines()
 	// Ports are published on the pod (which owns the network), not the containers.
-	if lines[0] != base+"pod create --name nr-app -p 3000:3000" {
+	if lines[0] != base+"pod create --replace --name nr-app -p 3000:3000" {
 		t.Errorf("pod create: %q", lines[0])
 	}
-	if lines[1] != base+"run -d --pull=never --pod nr-app --name nr-app -v /tmp/ws:/workspace -w /workspace img-primary sleep infinity" {
+	if lines[1] != base+"run -d --pull=never --replace --pod nr-app --name nr-app -v /tmp/ws:/workspace -w /workspace img-primary sleep infinity" {
 		t.Errorf("primary: %q", lines[1])
 	}
-	if lines[2] != base+"run -d --pull=never --pod nr-app --name nr-app-side1 img-side" {
+	if lines[2] != base+"run -d --pull=never --replace --pod nr-app --name nr-app-side1 img-side" {
 		t.Errorf("sidecar: %q", lines[2])
 	}
 }

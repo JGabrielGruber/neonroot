@@ -85,7 +85,11 @@ func (p *Podman) Version(ctx context.Context) (string, error) {
 // base images, so --pull=never makes a missing image fail fast instead of
 // hitting a registry.
 func (p *Podman) Run(ctx context.Context, spec RunSpec) (string, error) {
-	args := append(p.baseArgs(), "run", "-d", "--pull=never")
+	// --replace evicts a stale same-named container left by a previous session
+	// (e.g. the tmpfs clone was cleared without a clean `stop`). We only reach
+	// Run for a fresh start — an already-loaded workspace short-circuits earlier —
+	// so replacing is always the intent here.
+	args := append(p.baseArgs(), "run", "-d", "--pull=never", "--replace")
 	if spec.Pod != "" {
 		args = append(args, "--pod", spec.Pod)
 	}
@@ -148,7 +152,7 @@ func (p *Podman) Start(ctx context.Context, image, name, workspaceDir, mountTarg
 // attaches; the remaining images run as sidecars sharing the pod's network
 // (reachable over localhost). Returns the primary container's ID.
 func (p *Podman) StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string, ports []string, opts domain.SessionOpts) (string, error) {
-	args := append(p.baseArgs(), "pod", "create", "--name", podName)
+	args := append(p.baseArgs(), "pod", "create", "--replace", "--name", podName)
 	args = append(args, publishArgs(ports)...) // the pod owns the shared network
 	if _, err := p.Runner.Run(ctx, "podman", args...); err != nil {
 		return "", err

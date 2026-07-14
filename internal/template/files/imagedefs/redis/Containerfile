@@ -1,0 +1,5 @@
+# NeonRoot image {{image}} (redis) — a Redis sidecar for a workspace.
+# Runs on its default port; reachable from the primary container at
+# localhost:6379 (a pod shares the network). Edit, then:
+# neonroot image build {{image}}
+FROM docker.io/library/redis:7

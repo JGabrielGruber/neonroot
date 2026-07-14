@@ -1,0 +1,9 @@
+# NeonRoot image {{image}} (node) — Node.js dev environment.
+# Edit, then: neonroot image build {{image}}
+FROM docker.io/library/node:22-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+CMD ["/bin/bash"]

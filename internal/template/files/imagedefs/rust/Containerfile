@@ -1,0 +1,9 @@
+# NeonRoot image {{image}} (rust) — Rust dev environment.
+# Edit, then: neonroot image build {{image}}
+FROM docker.io/library/rust:1-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+CMD ["/bin/bash"]

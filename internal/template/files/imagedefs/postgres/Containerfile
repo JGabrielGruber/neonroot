@@ -1,0 +1,9 @@
+# NeonRoot image {{image}} (postgres) — a Postgres sidecar for a workspace.
+# Runs the database on its default port; reachable from the primary container at
+# localhost:5432 (a pod shares the network). Dev-configured (trust auth) — do not
+# use these settings in production. Edit, then: neonroot image build {{image}}
+FROM docker.io/library/postgres:16
+
+# Passwordless local auth so it starts with zero setup, for dev only.
+ENV POSTGRES_HOST_AUTH_METHOD=trust
+ENV POSTGRES_DB=dev

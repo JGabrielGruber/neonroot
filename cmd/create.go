@@ -21,6 +21,7 @@ import (
 var (
 	createVaultFlag    string
 	createFromFlag     string
+	createSeedFlag     string
 	createImageFlag    string
 	createMountFlag    string
 	createTemplateFlag string
@@ -99,8 +100,21 @@ image run host-only).`,
 		}
 		defer os.RemoveAll(content)
 
+		if createFromFlag != "" && createSeedFlag != "" {
+			return fmt.Errorf("--from and --seed are mutually exclusive")
+		}
+
 		image := createImageFlag
-		if createFromFlag != "" {
+		switch {
+		case createSeedFlag != "":
+			// Import an existing host directory as the initial content — the
+			// "turn this project into a workspace" path (and how NeonRoot is
+			// dogfooded on its own repo). History is left behind; the seed becomes
+			// the initial commit.
+			if err := copyHostDir(createSeedFlag, content); err != nil {
+				return fmt.Errorf("seeding from %q: %w", createSeedFlag, err)
+			}
+		case createFromFlag != "":
 			srcImage, err := seedFrom(cmd.Context(), g, createFromFlag, target.Name, content)
 			if err != nil {
 				return err
@@ -108,11 +122,13 @@ image run host-only).`,
 			if image == "" {
 				image = srcImage // inherit the source workspace's image
 			}
-		} else if err := template.Write(createTemplateFlag, app.Paths.TemplatesDir(), content, name); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("no template %q — see 'neonroot template ls'", createTemplateFlag)
+		default:
+			if err := template.Write(createTemplateFlag, app.Paths.TemplatesDir(), content, name); err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					return fmt.Errorf("no template %q — see 'neonroot template ls'", createTemplateFlag)
+				}
+				return err
 			}
-			return err
 		}
 
 		// Seed the workspace's bare repo. Local: create it on the drive and push
@@ -201,6 +217,52 @@ func seedFrom(ctx context.Context, g *git.Git, ref, defaultVault, content string
 	return entry.PrimaryImage(), os.RemoveAll(filepath.Join(content, ".git"))
 }
 
+// copyHostDir copies src's files into dst, skipping .git (the seeded workspace
+// starts with fresh history). Symlinks are dereferenced to regular files.
+func copyHostDir(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", src)
+	}
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return os.MkdirAll(filepath.Join(dst, rel), 0o755)
+		}
+		if !d.Type().IsRegular() {
+			return nil // skip sockets/devices; symlinks fall through via ReadFile below
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		mode := os.FileMode(0o644)
+		if fi, err := os.Stat(path); err == nil && fi.Mode()&0o111 != 0 {
+			mode = 0o755 // preserve the executable bit
+		}
+		return os.WriteFile(target, data, mode)
+	})
+}
+
 // parseWorkspaceRef splits "vault/workspace" or "workspace" into its parts.
 func parseWorkspaceRef(ref, defaultVault string) (vaultName, wsName string) {
 	if i := strings.IndexByte(ref, '/'); i >= 0 {
@@ -212,6 +274,7 @@ func parseWorkspaceRef(ref, defaultVault string) (vaultName, wsName string) {
 func init() {
 	createCmd.Flags().StringVar(&createVaultFlag, "vault", "", "target vault (default: configured default vault)")
 	createCmd.Flags().StringVar(&createFromFlag, "from", "", "seed from an existing workspace (<vault>/<workspace> or <workspace>)")
+	createCmd.Flags().StringVar(&createSeedFlag, "seed", "", "seed from an existing host directory (its files become the initial commit; .git is skipped)")
 	createCmd.Flags().StringVar(&createImageFlag, "image", "", "vault image the workspace runs inside (default: host-only)")
 	createCmd.Flags().StringVar(&createMountFlag, "mount", "", "where the workspace mounts inside the container (default: /workspace)")
 	createCmd.Flags().StringVar(&createTemplateFlag, "template", "default", "starter template (see 'neonroot template ls')")

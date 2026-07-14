@@ -1,0 +1,37 @@
+# NeonRoot image definition for {{image}} (ci) — a minimal, headless CI / self-test
+# sandbox: a Go toolchain + git + a self-contained sshd so `ssh localhost` works
+# passwordless *inside* the container, never touching the host. Purpose-built for
+# dogfooding NeonRoot's own ssh/rsync integration tests, but useful for any
+# container-based CI. Edit freely, then: neonroot image build {{image}}
+FROM docker.io/library/golang:alpine
+
+# Toolchain the tests and transport shell out to.
+RUN apk add --no-cache git openssh openssh-server rsync bash procps
+
+# Passwordless localhost ssh, fully self-contained: host keys, a throwaway keypair
+# authorized for root, and a client config that trusts localhost (a throwaway CI
+# box — no known_hosts churn). This is what lets the ssh integration tests run
+# inside the container instead of skipping.
+RUN ssh-keygen -A \
+    && mkdir -p /root/.ssh /run/sshd \
+    && chmod 700 /root/.ssh \
+    && ssh-keygen -t ed25519 -N "" -f /root/.ssh/id_ed25519 \
+    && cp /root/.ssh/id_ed25519.pub /root/.ssh/authorized_keys \
+    && chmod 600 /root/.ssh/authorized_keys \
+    && printf 'Host localhost 127.0.0.1 ::1\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel ERROR\n' > /root/.ssh/config \
+    && chmod 600 /root/.ssh/config \
+    && sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+
+# The workspace is bind-mounted (owned by the host uid), so mark it safe for git
+# and skip VCS stamping so `go build`/`test` don't choke on ownership.
+RUN git config --global --add safe.directory '*'
+ENV GOFLAGS=-buildvcs=false
+
+# ensure-sshd: start sshd once, idempotently. The container runs `sleep infinity`,
+# so a test run (or `neonroot run`) calls this before exercising ssh:
+#   neonroot run <ws> -- sh -c 'ensure-sshd && go test -tags integration ./...'
+RUN printf '#!/bin/sh\nmkdir -p /run/sshd\npgrep -x sshd >/dev/null 2>&1 || /usr/sbin/sshd\n' > /usr/local/bin/ensure-sshd \
+    && chmod +x /usr/local/bin/ensure-sshd
+
+WORKDIR /workspace
+CMD ["/bin/sh"]

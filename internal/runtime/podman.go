@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/JGabrielGruber/neonroot/internal/domain"
@@ -39,6 +40,32 @@ type RunSpec struct {
 	EnvFile string
 	// Mounts are extra bind-mounts (e.g. the SSH agent socket, ~/.gitconfig).
 	Mounts []domain.Mount
+	// Sandbox, when set, locks the container down (an agent sandbox).
+	Sandbox *domain.Sandbox
+}
+
+// sandboxArgs translates an isolation profile into podman run flags.
+func sandboxArgs(s *domain.Sandbox) []string {
+	if s == nil {
+		return nil
+	}
+	var args []string
+	if s.NoNetwork {
+		args = append(args, "--network=none")
+	}
+	if s.DropCaps {
+		args = append(args, "--cap-drop=ALL")
+	}
+	if s.NoNewPriv {
+		args = append(args, "--security-opt=no-new-privileges")
+	}
+	if s.Memory != "" {
+		args = append(args, "--memory="+s.Memory)
+	}
+	if s.PidsLimit > 0 {
+		args = append(args, "--pids-limit="+strconv.Itoa(s.PidsLimit))
+	}
+	return args
 }
 
 // publishArgs expands port specs into repeated -p flags, normalizing a bare
@@ -113,6 +140,7 @@ func (p *Podman) Run(ctx context.Context, spec RunSpec) (string, error) {
 	if spec.EnvFile != "" {
 		args = append(args, "--env-file", spec.EnvFile)
 	}
+	args = append(args, sandboxArgs(spec.Sandbox)...)
 	if spec.Pod == "" {
 		args = append(args, publishArgs(spec.Ports)...) // pod owns ports otherwise
 	}
@@ -144,6 +172,7 @@ func (p *Podman) Start(ctx context.Context, image, name, workspaceDir, mountTarg
 		Ports:        ports,
 		EnvFile:      opts.EnvFile,
 		Mounts:       opts.Mounts,
+		Sandbox:      opts.Sandbox,
 	})
 }
 
@@ -161,7 +190,7 @@ func (p *Podman) StartPod(ctx context.Context, podName string, imageRefs []strin
 		Pod: podName, Image: imageRefs[0], Name: primaryName,
 		WorkspaceDir: workspaceDir, MountTarget: mountTarget,
 		Command: []string{"sleep", "infinity"},
-		EnvFile: opts.EnvFile, Mounts: opts.Mounts,
+		EnvFile: opts.EnvFile, Mounts: opts.Mounts, Sandbox: opts.Sandbox,
 	})
 	if err != nil {
 		return "", err

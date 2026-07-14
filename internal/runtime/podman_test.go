@@ -101,6 +101,38 @@ func TestPodman_StartWithSecrets(t *testing.T) {
 	}
 }
 
+func TestPodman_SandboxFlags(t *testing.T) {
+	base := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers " +
+		"run -d --pull=never --replace --name nr-agent -v /tmp/ws:/workspace -w /workspace "
+
+	// isolated: all restrictions incl. no network.
+	rec := runnertest.New()
+	rec.Stdout["podman"] = "cid\n"
+	iso, _ := domain.SandboxFor(domain.IsolationIsolated)
+	if _, err := newPodman(rec).Start(context.Background(), "img", "nr-agent", "/tmp/ws", "/workspace", nil, domain.SessionOpts{Sandbox: &iso}); err != nil {
+		t.Fatal(err)
+	}
+	want := base + "--network=none --cap-drop=ALL --security-opt=no-new-privileges --memory=2g --pids-limit=512 img sleep infinity"
+	if got := rec.Lines()[0]; got != want {
+		t.Errorf("isolated:\n got %q\nwant %q", got, want)
+	}
+
+	// sandbox: same but network stays up (no --network=none).
+	rec = runnertest.New()
+	rec.Stdout["podman"] = "cid\n"
+	sb, _ := domain.SandboxFor(domain.IsolationSandbox)
+	if _, err := newPodman(rec).Start(context.Background(), "img", "nr-agent", "/tmp/ws", "/workspace", nil, domain.SessionOpts{Sandbox: &sb}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.Lines()[0]; strings.Contains(got, "--network=none") {
+		t.Errorf("sandbox tier must keep the network: %q", got)
+	}
+	want = base + "--cap-drop=ALL --security-opt=no-new-privileges --memory=2g --pids-limit=512 img sleep infinity"
+	if got := rec.Lines()[0]; got != want {
+		t.Errorf("sandbox:\n got %q\nwant %q", got, want)
+	}
+}
+
 func TestPodman_ExecArgs(t *testing.T) {
 	p := newPodman(runnertest.New())
 	base := []string{"podman", "--root", "/tmp/nr/containers", "--runroot", "/run/user/1000/nr/containers", "exec", "-it", "cid"}

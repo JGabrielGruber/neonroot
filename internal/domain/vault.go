@@ -12,9 +12,19 @@ const SchemaVersion = 1
 type Vault struct {
 	// Name is the user-facing identifier used on the CLI (e.g. "ext").
 	Name string `toml:"name"`
-	// Path is the absolute path to the vault root on the drive.
-	Path string `toml:"path"`
+	// Path is the absolute path to the vault root on the drive. Empty for a
+	// remote vault, whose backing storage lives on an ssh server (see Remote).
+	Path string `toml:"path,omitempty"`
+	// Remote is the ssh URL (or scp-style target) of a vault hosted on a server
+	// rather than a local drive. Empty means a local, drive-backed vault — the
+	// omitempty tag keeps existing local configs byte-identical.
+	Remote string `toml:"remote,omitempty"`
 }
+
+// IsRemote reports whether the vault is hosted over ssh rather than on a local
+// drive. Remote vaults resolve availability optimistically (no mount table) and
+// reach their catalog/workspaces/images over git and scp.
+func (v Vault) IsRemote() bool { return v.Remote != "" }
 
 // VaultState describes whether a vault's backing storage is reachable right now.
 // It is resolved at command time from the live mount table, never assumed.

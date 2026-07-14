@@ -9,6 +9,7 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/config"
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
+	"github.com/JGabrielGruber/neonroot/internal/remote"
 	"github.com/JGabrielGruber/neonroot/internal/vault"
 )
 
@@ -18,19 +19,33 @@ var vaultCmd = &cobra.Command{
 }
 
 var vaultAddCmd = &cobra.Command{
-	Use:   "add <name> <path>",
-	Short: "Register a vault path in config",
-	Long: `Registers a named cold-storage location (typically a directory on an
-external drive). If no real default vault is set yet, the new vault becomes the
-default so workspace commands need no --vault. This writes config, the only file
-NeonRoot stores on the SD card.`,
+	Use:   "add <name> <path-or-ssh-url>",
+	Short: "Register a vault (local drive path or remote ssh url) in config",
+	Long: `Registers a named cold-storage location. The location is either a local
+absolute path (typically a directory on an external drive) or a remote ssh
+target — 'ssh://user@host/path/to/vault' or 'user@host:path/to/vault' — for a
+vault hosted on a server. A remote vault holds the same layout (catalog, git
+workspaces, image tarballs) and is reached over ssh; the network is only touched
+lazily, on the first operation that needs it. If no real default vault is set
+yet, the new vault becomes the default so workspace commands need no --vault.
+This writes config, the only file NeonRoot stores on the SD card.`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		name, path := args[0], args[1]
-		if !filepath.IsAbs(path) {
-			return fmt.Errorf("path must be absolute: %s", path)
+		name, loc := args[0], args[1]
+
+		var v domain.Vault
+		if remote.Looks(loc) {
+			if _, err := remote.Parse(loc); err != nil {
+				return fmt.Errorf("invalid remote address: %w", err)
+			}
+			v = domain.Vault{Name: name, Remote: loc}
+		} else {
+			if !filepath.IsAbs(loc) {
+				return fmt.Errorf("path must be absolute (or an ssh:// / user@host: remote): %s", loc)
+			}
+			v = domain.Vault{Name: name, Path: filepath.Clean(loc)}
 		}
-		app.Config.AddVault(domain.Vault{Name: name, Path: filepath.Clean(path)})
+		app.Config.AddVault(v)
 
 		// Configure-once: the first real vault becomes the default, replacing the
 		// volatile scratch placeholder.
@@ -43,7 +58,11 @@ NeonRoot stores on the SD card.`,
 			return err
 		}
 
-		msg := fmt.Sprintf("registered vault %q → %s", name, path)
+		dest := v.Path
+		if v.IsRemote() {
+			dest = v.Remote
+		}
+		msg := fmt.Sprintf("registered vault %q → %s", name, dest)
 		if madeDefault {
 			msg += " (now the default)"
 		}
@@ -71,7 +90,13 @@ var vaultListCmd = &cobra.Command{
 			if r.Name == app.Config.DefaultVault {
 				marker = "*"
 			}
-			fmt.Fprintf(out, "%s %-12s %-11s %s\n", marker, r.Name, vault.State(r.Path, mounts), r.Path)
+			kind, state, loc := "local", vault.State(r.Path, mounts).String(), r.Path
+			if r.IsRemote() {
+				// Availability is resolved lazily on the first ssh op, so the
+				// listing reports "remote" rather than probing the network.
+				kind, state, loc = "remote", "remote", r.Remote
+			}
+			fmt.Fprintf(out, "%s %-12s %-7s %-11s %s\n", marker, r.Name, kind, state, loc)
 		}
 		return nil
 	},
@@ -130,11 +155,12 @@ this only forgets the registration.`,
 var (
 	vaultSetRenameFlag string
 	vaultSetPathFlag   string
+	vaultSetRemoteFlag string
 )
 
 var vaultSetCmd = &cobra.Command{
 	Use:   "set <name>",
-	Short: "Edit a vault's registration (name, path)",
+	Short: "Edit a vault's registration (name, path, remote)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
@@ -160,6 +186,14 @@ var vaultSetCmd = &cobra.Command{
 				return fmt.Errorf("path must be absolute: %s", vaultSetPathFlag)
 			}
 			v.Path = filepath.Clean(vaultSetPathFlag)
+			v.Remote = "" // a vault is local XOR remote
+		}
+		if f.Changed("remote") {
+			if _, err := remote.Parse(vaultSetRemoteFlag); err != nil {
+				return fmt.Errorf("invalid remote address: %w", err)
+			}
+			v.Remote = vaultSetRemoteFlag
+			v.Path = "" // a vault is local XOR remote
 		}
 		// AddVault replaces by name; on rename it also drops the old entry.
 		if f.Changed("rename") {
@@ -192,7 +226,8 @@ func saveConfig() error {
 
 func init() {
 	vaultSetCmd.Flags().StringVar(&vaultSetRenameFlag, "rename", "", "rename the vault")
-	vaultSetCmd.Flags().StringVar(&vaultSetPathFlag, "path", "", "change the vault's path")
+	vaultSetCmd.Flags().StringVar(&vaultSetPathFlag, "path", "", "change the vault's local path (clears any remote)")
+	vaultSetCmd.Flags().StringVar(&vaultSetRemoteFlag, "remote", "", "change the vault's remote ssh url (clears any local path)")
 	vaultCmd.AddCommand(vaultAddCmd, vaultListCmd, vaultSetDefaultCmd, vaultRmCmd, vaultSetCmd)
 	rootCmd.AddCommand(vaultCmd)
 }

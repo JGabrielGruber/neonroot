@@ -13,6 +13,7 @@ RUN pacman -Syu --noconfirm --needed \
       ripgrep fd fzf bat eza zoxide lazygit github-cli \
       wget curl unzip \
       python python-pip nodejs npm \
+      mise \
       ttf-nerd-fonts-symbols-mono \
     && pacman -Scc --noconfirm
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -58,6 +59,9 @@ type Loader struct {
 	// Catalog reads the vault's index kind-agnostically (local index.toml or a
 	// remote _catalog.git). Its zero value works for local vaults.
 	Catalog vault.Catalog
+	// Runner backs the ssh/scp transport used to fetch a remote vault's image
+	// tarballs into tmpfs. Unused for local vaults.
+	Runner platform.Runner
 	// Sessions/Runtime start a host session / container after the clone; both
 	// degrade gracefully — a failure there never fails a load.
 	Sessions Sessions
@@ -162,12 +166,7 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 	// If there's no container (host-only, or the container failed), fall back to
 	// a host tmux session.
 	containerized := false
-	// Remote vaults run host-only for now: their image tarballs live on the
-	// server and transport lands in a later stage. Warn so it isn't silent.
-	if v.IsRemote() && len(entry.Images) > 0 && !l.NoContainer {
-		l.UI.Warn(fmt.Sprintf("%q declares an image but remote-vault images aren't transported yet — loading host-only", name))
-	}
-	if len(entry.Images) > 0 && !v.IsRemote() && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
+	if len(entry.Images) > 0 && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
 		if cid, err := l.startContainer(ctx, v, entry, name, dst); err != nil {
 			l.UI.Warn(fmt.Sprintf("container not started (host-only): %v", err))
 		} else {
@@ -200,7 +199,16 @@ func (l *Loader) startContainer(ctx context.Context, v domain.Vault, entry domai
 	for i, img := range entry.Images {
 		l.UI.Step(fmt.Sprintf("loading image %q", img))
 		refs[i] = vault.ImageRef(img)
+		// Local vaults load the tar straight off the drive; remote vaults fetch it
+		// into tmpfs over scp first (podman load needs a local file).
 		tar := vault.ImageTarPath(v.Path, img)
+		if v.IsRemote() {
+			fetched, err := l.fetchRemoteImage(ctx, v, img)
+			if err != nil {
+				return "", err
+			}
+			tar = fetched
+		}
 		if err := l.Runtime.EnsureImage(ctx, refs[i], tar, l.ReloadImage); err != nil {
 			return "", err
 		}
@@ -212,6 +220,26 @@ func (l *Loader) startContainer(ctx context.Context, v domain.Vault, entry domai
 	}
 	l.UI.Step(fmt.Sprintf("starting pod (%s + %d sidecar(s))", entry.Images[0], len(refs)-1))
 	return l.Runtime.StartPod(ctx, containerName(name), refs, containerName(name), dst, entry.Mount, entry.Ports)
+}
+
+// fetchRemoteImage downloads a remote vault's images/<img>/image.tar into a
+// tmpfs cache path over scp and returns that local path for podman load.
+func (l *Loader) fetchRemoteImage(ctx context.Context, v domain.Vault, img string) (string, error) {
+	addr, err := remote.Parse(v.Remote)
+	if err != nil {
+		return "", err
+	}
+	dstDir := filepath.Join(l.Paths.Cache, "images", v.Name, img)
+	if err := os.MkdirAll(dstDir, 0o700); err != nil {
+		return "", err
+	}
+	localTar := filepath.Join(dstDir, "image.tar")
+	l.UI.Step(fmt.Sprintf("fetching image %q from %q", img, v.Name))
+	t := remote.Transport{Runner: l.Runner, Addr: addr}
+	if err := t.Fetch(ctx, path.Join("images", img, "image.tar"), localTar); err != nil {
+		return "", err
+	}
+	return localTar, nil
 }
 
 // containerName derives a stable container name from a workspace name, matching

@@ -10,12 +10,18 @@ import (
 
 // Transport moves files and runs setup over ssh for a remote vault. Git already
 // handles the workspace and catalog repos; Transport covers the non-git pieces —
-// fetching/uploading image tarballs (scp) and initializing bare repos on the
-// server (ssh). It goes through platform.Runner so the exact scp/ssh argv is
+// fetching/uploading image tarballs and initializing bare repos on the server.
+// It goes through platform.Runner so the exact scp/ssh/rsync argv is
 // unit-testable without spawning.
 type Transport struct {
 	Runner platform.Runner
 	Addr   Addr
+	// Rsync prefers rsync (resume + skip-unchanged) over scp for file/dir
+	// transfers, when rsync is also present locally; on any rsync failure the
+	// transfer falls back to scp once, so a remote lacking rsync still works.
+	Rsync bool
+	// Warn, if set, surfaces a non-fatal note (e.g. the rsync→scp fallback).
+	Warn func(string)
 }
 
 // scpRemote renders the scp file spec "[user@]host:path" for a vault-relative
@@ -45,28 +51,70 @@ func (t Transport) scpArgs(flags []string, src, dst string) []string {
 // Fetch copies a vault-relative remote file (e.g. images/dev/image.tar) to a
 // local path, typically in tmpfs before a podman load.
 func (t Transport) Fetch(ctx context.Context, remoteRel, localDst string) error {
-	_, err := t.Runner.Run(ctx, "scp", t.scpArgs(nil, t.scpRemote(remoteRel), localDst)...)
-	return err
+	return t.transfer(ctx, false, t.scpRemote(remoteRel), localDst)
 }
 
 // Upload copies a local file to a vault-relative remote path (e.g. a freshly
 // saved image.tar). Used when building/snapshotting images against a remote.
 func (t Transport) Upload(ctx context.Context, localSrc, remoteRel string) error {
-	_, err := t.Runner.Run(ctx, "scp", t.scpArgs(nil, localSrc, t.scpRemote(remoteRel))...)
-	return err
+	return t.transfer(ctx, false, localSrc, t.scpRemote(remoteRel))
 }
 
 // FetchDir recursively copies a vault-relative remote directory (e.g. an image's
 // build context) to a local parent, so it lands at localParent/<basename>.
 func (t Transport) FetchDir(ctx context.Context, remoteRel, localParent string) error {
-	_, err := t.Runner.Run(ctx, "scp", t.scpArgs([]string{"-r"}, t.scpRemote(remoteRel), localParent)...)
-	return err
+	return t.transfer(ctx, true, t.scpRemote(remoteRel), localParent)
 }
 
 // UploadDir recursively copies a local directory to a vault-relative remote path.
 func (t Transport) UploadDir(ctx context.Context, localSrc, remoteRel string) error {
-	_, err := t.Runner.Run(ctx, "scp", t.scpArgs([]string{"-r"}, localSrc, t.scpRemote(remoteRel))...)
+	return t.transfer(ctx, true, localSrc, t.scpRemote(remoteRel))
+}
+
+// transfer runs one copy, preferring rsync when enabled and locally available,
+// else scp. A remote spec (src or dst) is "[user@]host:path"; the dest of a
+// recursive copy is the parent, so both scp -r and rsync land the source at
+// dest/<basename> — no trailing-slash divergence. On rsync failure it falls back
+// to scp once, so a remote without rsync still succeeds.
+func (t Transport) transfer(ctx context.Context, recursive bool, src, dst string) error {
+	if t.useRsync() {
+		if _, err := t.Runner.Run(ctx, "rsync", t.rsyncArgs(recursive, src, dst)...); err == nil {
+			return nil
+		} else if t.Warn != nil {
+			t.Warn(fmt.Sprintf("rsync failed (%v) — falling back to scp", err))
+		}
+	}
+	var flags []string
+	if recursive {
+		flags = []string{"-r"}
+	}
+	_, err := t.Runner.Run(ctx, "scp", t.scpArgs(flags, src, dst)...)
 	return err
+}
+
+// useRsync reports whether rsync is both requested and present locally. It can't
+// prove the remote has rsync — the scp fallback in transfer covers that.
+func (t Transport) useRsync() bool {
+	if !t.Rsync {
+		return false
+	}
+	_, err := t.Runner.LookPath("rsync")
+	return err == nil
+}
+
+// rsyncArgs builds the rsync argv: the ssh transport (carrying the port via
+// -e "ssh -p N"), --partial for resume, and -a for a recursive/archive dir copy.
+func (t Transport) rsyncArgs(recursive bool, src, dst string) []string {
+	shell := "ssh"
+	if t.Addr.Port != "" {
+		shell = "ssh -p " + t.Addr.Port
+	}
+	var args []string
+	if recursive {
+		args = append(args, "-a")
+	}
+	args = append(args, "-e", shell, "--partial", src, dst)
+	return args
 }
 
 // Mkdir creates a vault-relative remote directory (and parents) over ssh, so an

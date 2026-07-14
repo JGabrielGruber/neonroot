@@ -38,8 +38,11 @@ This writes config, the only file NeonRoot stores on the SD card.`,
 			if _, err := remote.Parse(loc); err != nil {
 				return fmt.Errorf("invalid remote address: %w", err)
 			}
-			v = domain.Vault{Name: name, Remote: loc}
+			v = domain.Vault{Name: name, Remote: loc, Rsync: vaultAddRsyncFlag}
 		} else {
+			if vaultAddRsyncFlag {
+				return fmt.Errorf("--rsync applies only to remote (ssh) vaults")
+			}
 			if !filepath.IsAbs(loc) {
 				return fmt.Errorf("path must be absolute (or an ssh:// / user@host: remote): %s", loc)
 			}
@@ -153,9 +156,11 @@ this only forgets the registration.`,
 }
 
 var (
+	vaultAddRsyncFlag  bool
 	vaultSetRenameFlag string
 	vaultSetPathFlag   string
 	vaultSetRemoteFlag string
+	vaultSetRsyncFlag  bool
 )
 
 var vaultSetCmd = &cobra.Command{
@@ -195,6 +200,12 @@ var vaultSetCmd = &cobra.Command{
 			v.Remote = vaultSetRemoteFlag
 			v.Path = "" // a vault is local XOR remote
 		}
+		if f.Changed("rsync") {
+			v.Rsync = vaultSetRsyncFlag
+		}
+		if v.Rsync && !v.IsRemote() {
+			return fmt.Errorf("--rsync applies only to remote (ssh) vaults")
+		}
 		// AddVault replaces by name; on rename it also drops the old entry.
 		if f.Changed("rename") {
 			removeVault(name)
@@ -225,9 +236,11 @@ func saveConfig() error {
 }
 
 func init() {
+	vaultAddCmd.Flags().BoolVar(&vaultAddRsyncFlag, "rsync", false, "prefer rsync over scp for image transfers (remote vaults; falls back to scp)")
 	vaultSetCmd.Flags().StringVar(&vaultSetRenameFlag, "rename", "", "rename the vault")
 	vaultSetCmd.Flags().StringVar(&vaultSetPathFlag, "path", "", "change the vault's local path (clears any remote)")
 	vaultSetCmd.Flags().StringVar(&vaultSetRemoteFlag, "remote", "", "change the vault's remote ssh url (clears any local path)")
+	vaultSetCmd.Flags().BoolVar(&vaultSetRsyncFlag, "rsync", false, "prefer rsync over scp for image transfers (remote vaults)")
 	vaultCmd.AddCommand(vaultAddCmd, vaultListCmd, vaultSetDefaultCmd, vaultRmCmd, vaultSetCmd)
 	rootCmd.AddCommand(vaultCmd)
 }

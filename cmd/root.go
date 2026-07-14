@@ -151,13 +151,14 @@ func (a *App) catalog() vault.Catalog {
 	return vault.Catalog{Git: &git.Git{Runner: a.Runner}, Runner: a.Runner, CacheDir: a.Paths.Cache}
 }
 
-// transport builds the ssh/scp transport for a remote vault.
+// transport builds the ssh/scp(/rsync) transport for a remote vault, honoring its
+// rsync preference and surfacing any fallback through the reporter.
 func (a *App) transport(v domain.Vault) (remote.Transport, error) {
 	addr, err := remote.Parse(v.Remote)
 	if err != nil {
 		return remote.Transport{}, err
 	}
-	return remote.Transport{Runner: a.Runner, Addr: addr}, nil
+	return remote.Transport{Runner: a.Runner, Addr: addr, Rsync: v.Rsync, Warn: a.UI.Warn}, nil
 }
 
 // podman builds the Podman adapter with storage pinned to tmpfs, creating the

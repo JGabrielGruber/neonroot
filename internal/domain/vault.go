@@ -19,6 +19,9 @@ type Vault struct {
 	// rather than a local drive. Empty means a local, drive-backed vault — the
 	// omitempty tag keeps existing local configs byte-identical.
 	Remote string `toml:"remote,omitempty"`
+	// Rsync opts a remote vault into rsync (resume + skip-unchanged) for image
+	// transfers, falling back to scp when rsync is absent. Ignored for local vaults.
+	Rsync bool `toml:"rsync,omitempty"`
 }
 
 // IsRemote reports whether the vault is hosted over ssh rather than on a local

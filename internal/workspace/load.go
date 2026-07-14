@@ -235,7 +235,7 @@ func (l *Loader) fetchRemoteImage(ctx context.Context, v domain.Vault, img strin
 	}
 	localTar := filepath.Join(dstDir, "image.tar")
 	l.UI.Step(fmt.Sprintf("fetching image %q from %q", img, v.Name))
-	t := remote.Transport{Runner: l.Runner, Addr: addr}
+	t := remote.Transport{Runner: l.Runner, Addr: addr, Rsync: v.Rsync, Warn: l.UI.Warn}
 	if err := t.Fetch(ctx, path.Join("images", img, "image.tar"), localTar); err != nil {
 		return "", err
 	}

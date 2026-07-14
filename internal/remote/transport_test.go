@@ -2,10 +2,14 @@ package remote
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/JGabrielGruber/neonroot/internal/platform/runnertest"
 )
+
+var errStub = errors.New("stub failure")
 
 func TestTransport_FetchAndUpload(t *testing.T) {
 	rec := runnertest.New()
@@ -64,6 +68,66 @@ func TestTransport_DirsInitAndMkdir(t *testing.T) {
 		if got := rec.Lines()[i]; got != w {
 			t.Errorf("line %d:\n got %q\nwant %q", i, got, w)
 		}
+	}
+}
+
+func TestTransport_RsyncPreferred(t *testing.T) {
+	rec := runnertest.New()
+	addr, _ := Parse("ssh://git@host:2222/srv/vault")
+	tr := Transport{Runner: rec, Addr: addr, Rsync: true}
+	ctx := context.Background()
+
+	if err := tr.Fetch(ctx, "images/dev/image.tar", "/tmp/nr/image.tar"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.FetchDir(ctx, "images/dev", "/tmp/build"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		// File: no -a; the port rides inside -e "ssh -p 2222"; --partial for resume.
+		"rsync -e ssh -p 2222 --partial git@host:/srv/vault/images/dev/image.tar /tmp/nr/image.tar",
+		// Dir: -a (archive/recursive), dest is the parent → lands at /tmp/build/dev.
+		"rsync -a -e ssh -p 2222 --partial git@host:/srv/vault/images/dev /tmp/build",
+	}
+	for i, w := range want {
+		if got := rec.Lines()[i]; got != w {
+			t.Errorf("line %d:\n got %q\nwant %q", i, got, w)
+		}
+	}
+}
+
+func TestTransport_RsyncFallsBackToScp(t *testing.T) {
+	rec := runnertest.New()
+	rec.Errs["rsync"] = errStub // rsync present locally but fails (e.g. remote lacks it)
+	addr, _ := Parse("ssh://git@host/srv/vault")
+	tr := Transport{Runner: rec, Addr: addr, Rsync: true}
+
+	if err := tr.Fetch(context.Background(), "images/dev/image.tar", "/tmp/x.tar"); err != nil {
+		t.Fatal(err)
+	}
+	lines := rec.Lines()
+	if len(lines) != 2 {
+		t.Fatalf("expected rsync attempt then scp fallback, got %v", lines)
+	}
+	if !strings.HasPrefix(lines[0], "rsync ") {
+		t.Errorf("first attempt should be rsync: %q", lines[0])
+	}
+	if lines[1] != "scp git@host:/srv/vault/images/dev/image.tar /tmp/x.tar" {
+		t.Errorf("fallback should be scp: %q", lines[1])
+	}
+}
+
+func TestTransport_RsyncAbsentUsesScp(t *testing.T) {
+	rec := runnertest.New()
+	rec.Missing["rsync"] = true // rsync requested but not installed locally
+	addr, _ := Parse("ssh://git@host/srv/vault")
+	tr := Transport{Runner: rec, Addr: addr, Rsync: true}
+
+	if err := tr.Fetch(context.Background(), "images/dev/image.tar", "/tmp/x.tar"); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.Lines()[0]; !strings.HasPrefix(got, "scp ") {
+		t.Errorf("should go straight to scp when rsync absent: %q", got)
 	}
 }
 

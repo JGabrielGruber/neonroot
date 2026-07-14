@@ -29,18 +29,18 @@ var statusCmd = &cobra.Command{
 // workspaceStatus shows one loaded workspace's live git state: uncommitted
 // changes and how far ahead/behind its vault it is.
 func workspaceStatus(cmd *cobra.Command, name string) error {
-	ws, err := workspace.ReadState(app.Paths, name)
-	if err != nil {
-		return err
-	}
 	g := &git.Git{Runner: app.Runner}
 	if !g.Available() {
 		return fmt.Errorf("git is required but was not found on PATH")
 	}
-	st, err := g.Status(cmd.Context(), ws.Root)
+	r, err := workspace.ReportFor(cmd.Context(), app.Paths, g, name)
 	if err != nil {
 		return err
 	}
+	if r.Err != nil {
+		return r.Err
+	}
+	ws, st := r.Workspace, r.Status
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "%s (from %s) at %s\n", ws.Name, ws.SourceVault, ws.Root)
 	switch {
@@ -89,22 +89,39 @@ func overviewStatus(cmd *cobra.Command) error {
 		}
 	}
 
-	loaded, err := workspace.List(app.Paths)
+	reports, err := workspace.Reports(cmd.Context(), app.Paths, &git.Git{Runner: app.Runner})
 	if err != nil {
 		return err
 	}
-	if len(loaded) > 0 {
+	if len(reports) > 0 {
 		fmt.Fprintf(out, "\nhot storage — loaded workspaces (in tmpfs):\n")
 		var total int64
-		for _, w := range loaded {
-			size := workspace.HotSize(w.Root)
-			total += size
-			fmt.Fprintf(out, "  %-12s from %-10s %8s  %s\n", w.Name, w.SourceVault, humanSize(size), w.Root)
+		for _, r := range reports {
+			total += r.HotBytes
+			fmt.Fprintf(out, "  %-12s from %-10s %8s  %s  %s\n",
+				r.Workspace.Name, r.Workspace.SourceVault, humanSize(r.HotBytes),
+				pendingMark(r), r.Workspace.Root)
 		}
 		fmt.Fprintf(out, "  %-12s %27s\n", "TOTAL", humanSize(total))
-		fmt.Fprintf(out, "\nrun 'neonroot status <workspace>' to see pending changes\n")
+		fmt.Fprintf(out, "\nrun 'neonroot status <workspace>' for details\n")
 	}
 	return nil
+}
+
+// pendingMark is a compact indicator of a loaded workspace's sync state.
+func pendingMark(r workspace.Report) string {
+	switch {
+	case r.Err != nil:
+		return "?"
+	case r.Status.Dirty && r.Status.Ahead > 0:
+		return "±"
+	case r.Status.Dirty:
+		return "*"
+	case r.Status.Ahead > 0:
+		return "↑"
+	default:
+		return "✓"
+	}
 }
 
 // humanSize renders a byte count compactly.

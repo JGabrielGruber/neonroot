@@ -9,9 +9,10 @@ product**: human-first UX, then a fullstack toolbelt, reach, and an AI-agent sub
 
 ---
 
-## E1 — Human-first (in progress)
+## E1 — Human-first ✅ shipped
 
-Turn the CLI into something you can live in. Ships safety-first, then the cockpit.
+Turned the CLI into something you can live in — safety-first, then the cockpit.
+All items below are shipped.
 
 - **`workspace.Report` helper** — one reusable "is this loaded workspace dirty/ahead/
   behind, and how big?" predicate (reusing `git.Status.HasPendingWork`), consumed by

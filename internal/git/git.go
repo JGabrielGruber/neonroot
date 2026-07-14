@@ -85,7 +85,15 @@ func (g *Git) SeedPush(ctx context.Context, pushTarget, contentDir string) error
 // --single-branch --branch main), a plain clone of an empty bare repo succeeds
 // with an empty working tree.
 func (g *Git) CloneCatalog(ctx context.Context, origin, dst string) error {
-	_, err := g.run(ctx, "", "clone", "-q", origin, dst)
+	if _, err := g.run(ctx, "", "clone", "-q", origin, dst); err != nil {
+		return err
+	}
+	// Cloning an *empty* bare repo leaves the local branch at the client's
+	// init.defaultBranch (often master), so a first commit would land off `main`
+	// and `push origin main` fails with "src refspec main does not match any".
+	// Pin the (unborn) branch to main; on a non-empty clone HEAD is already main,
+	// so this is a harmless no-op.
+	_, err := g.run(ctx, dst, "symbolic-ref", "HEAD", "refs/heads/"+defaultBranch)
 	return err
 }
 

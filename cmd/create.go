@@ -72,121 +72,145 @@ image run host-only).`,
 		if err := app.requireAvailable(target); err != nil {
 			return err
 		}
-
 		g := &git.Git{Runner: app.Runner}
 		if !g.Available() {
 			return fmt.Errorf("git is required to create workspaces but was not found on PATH")
 		}
-
 		lock, err := app.lock("vault-" + target.Name)
 		if err != nil {
 			return err
 		}
 		defer lock.Unlock()
 
-		cat := app.catalog()
-		idx, err := cat.Read(cmd.Context(), target)
-		if errors.Is(err, fs.ErrNotExist) {
-			idx = vault.NewIndex()
-		} else if err != nil {
-			return err
+		spec := wsSpec{
+			Image: createImageFlag, With: splitList(createWithFlag),
+			Mount: createMountFlag, Shell: shellCommand(createShellFlag),
+			Ports: splitList(createPortFlag), Up: shellCommand(createUpFlag),
+			Secrets: createSecretsFlag, Isolation: isolationProfile(createSandboxFlag, createIsolatedFlag),
+			Seed: createSeedFlag, From: createFromFlag, Template: createTemplateFlag,
 		}
-		if _, exists := vault.Workspace(idx, name); exists {
-			return fmt.Errorf("%w: %q in vault %q", domain.ErrWorkspaceExists, name, target.Name)
-		}
-
-		// Build the initial content in a throwaway tmpfs dir.
-		content, err := os.MkdirTemp(app.Paths.Cache, "create-*")
+		entry, rev, err := createWorkspace(cmd.Context(), g, target, name, spec)
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(content)
 
-		if createFromFlag != "" && createSeedFlag != "" {
-			return fmt.Errorf("--from and --seed are mutually exclusive")
-		}
-
-		image := createImageFlag
-		switch {
-		case createSeedFlag != "":
-			// Import an existing host directory as the initial content — the
-			// "turn this project into a workspace" path (and how NeonRoot is
-			// dogfooded on its own repo). History is left behind; the seed becomes
-			// the initial commit.
-			if err := copyHostDir(createSeedFlag, content); err != nil {
-				return fmt.Errorf("seeding from %q: %w", createSeedFlag, err)
-			}
-		case createFromFlag != "":
-			srcImage, err := seedFrom(cmd.Context(), g, createFromFlag, target.Name, content)
-			if err != nil {
-				return err
-			}
-			if image == "" {
-				image = srcImage // inherit the source workspace's image
-			}
-		default:
-			if err := template.Write(createTemplateFlag, app.Paths.TemplatesDir(), content, name); err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					return fmt.Errorf("no template %q — see 'neonroot template ls'", createTemplateFlag)
-				}
-				return err
-			}
-		}
-
-		// Seed the workspace's bare repo. Local: create it on the drive and push
-		// the initial commit. Remote: init it on the server over ssh, then push
-		// the initial commit to its ssh URL.
-		root := filepath.Join("workspaces", name+".git")
-		if target.IsRemote() {
-			addr, err := remote.Parse(target.Remote)
-			if err != nil {
-				return err
-			}
-			t := remote.Transport{Runner: app.Runner, Addr: addr}
-			if err := t.InitBare(cmd.Context(), root); err != nil {
-				return err
-			}
-			if err := g.SeedPush(cmd.Context(), addr.SSHURL(root), content); err != nil {
-				return err
-			}
-		} else {
-			bare := filepath.Join(target.Path, root)
-			if err := g.SeedContent(cmd.Context(), bare, content); err != nil {
-				return err
-			}
-		}
-
-		isolation := isolationProfile(createSandboxFlag, createIsolatedFlag)
-		if isolation != "" && createSecretsFlag {
-			return fmt.Errorf("--secrets and --sandbox/--isolated are mutually exclusive (a sandbox must not carry your identity)")
-		}
-
-		entry := domain.IndexWorkspace{
-			Name: name, Root: root, Mount: createMountFlag,
-			Shell:     shellCommand(createShellFlag),
-			Ports:     splitList(createPortFlag),
-			Up:        shellCommand(createUpFlag),
-			Secrets:   createSecretsFlag,
-			Isolation: isolation,
-		}
-		if image != "" {
-			entry.Images = append([]string{image}, splitList(createWithFlag)...)
-		} else if createWithFlag != "" {
-			return fmt.Errorf("--with (sidecars) requires --image (the primary container)")
-		}
-		idx.Workspaces = append(idx.Workspaces, entry)
-		vault.Bump(idx)
-		if err := cat.Write(cmd.Context(), target, idx); err != nil {
-			return err
-		}
-
-		msg := fmt.Sprintf("created workspace %q in vault %q (revision %d)", name, target.Name, idx.Revision)
-		if image != "" {
-			msg += fmt.Sprintf(", image %q", image)
+		msg := fmt.Sprintf("created workspace %q in vault %q (revision %d)", name, target.Name, rev)
+		if img := entry.PrimaryImage(); img != "" {
+			msg += fmt.Sprintf(", image %q", img)
 		}
 		app.UI.Success(msg)
 		return nil
 	},
+}
+
+// wsSpec describes a workspace to create — the fields create/spawn set.
+type wsSpec struct {
+	Image     string   // primary image ("" = host-only)
+	With      []string // sidecar images
+	Mount     string
+	Shell     []string
+	Ports     []string
+	Up        []string
+	Secrets   bool
+	Isolation string
+	// Content source: Seed (a host dir) XOR From (an existing workspace); neither
+	// falls back to Template (default "default").
+	Seed     string
+	From     string
+	Template string
+}
+
+// createWorkspace seeds a workspace's bare repo (local or remote) and registers
+// it in the vault's catalog. The caller holds the vault lock and has checked
+// availability. Returns the stored entry (with any inherited image) and the new
+// catalog revision.
+func createWorkspace(ctx context.Context, g *git.Git, target domain.Vault, name string, spec wsSpec) (domain.IndexWorkspace, int64, error) {
+	var zero domain.IndexWorkspace
+	if spec.Seed != "" && spec.From != "" {
+		return zero, 0, fmt.Errorf("--from and --seed are mutually exclusive")
+	}
+	if spec.Isolation != "" && spec.Secrets {
+		return zero, 0, fmt.Errorf("--secrets and --sandbox/--isolated are mutually exclusive (a sandbox must not carry your identity)")
+	}
+
+	cat := app.catalog()
+	idx, err := cat.Read(ctx, target)
+	if errors.Is(err, fs.ErrNotExist) {
+		idx = vault.NewIndex()
+	} else if err != nil {
+		return zero, 0, err
+	}
+	if _, exists := vault.Workspace(idx, name); exists {
+		return zero, 0, fmt.Errorf("%w: %q in vault %q", domain.ErrWorkspaceExists, name, target.Name)
+	}
+
+	// Build the initial content in a throwaway tmpfs dir.
+	content, err := os.MkdirTemp(app.Paths.Cache, "create-*")
+	if err != nil {
+		return zero, 0, err
+	}
+	defer os.RemoveAll(content)
+
+	image := spec.Image
+	switch {
+	case spec.Seed != "":
+		if err := copyHostDir(spec.Seed, content); err != nil {
+			return zero, 0, fmt.Errorf("seeding from %q: %w", spec.Seed, err)
+		}
+	case spec.From != "":
+		srcImage, err := seedFrom(ctx, g, spec.From, target.Name, content)
+		if err != nil {
+			return zero, 0, err
+		}
+		if image == "" {
+			image = srcImage // inherit the source workspace's image
+		}
+	default:
+		tpl := spec.Template
+		if tpl == "" {
+			tpl = "default"
+		}
+		if err := template.Write(tpl, app.Paths.TemplatesDir(), content, name); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return zero, 0, fmt.Errorf("no template %q — see 'neonroot template ls'", tpl)
+			}
+			return zero, 0, err
+		}
+	}
+
+	// Seed the bare repo — on the drive, or over ssh for a remote vault.
+	root := filepath.Join("workspaces", name+".git")
+	if target.IsRemote() {
+		addr, err := remote.Parse(target.Remote)
+		if err != nil {
+			return zero, 0, err
+		}
+		t := remote.Transport{Runner: app.Runner, Addr: addr}
+		if err := t.InitBare(ctx, root); err != nil {
+			return zero, 0, err
+		}
+		if err := g.SeedPush(ctx, addr.SSHURL(root), content); err != nil {
+			return zero, 0, err
+		}
+	} else if err := g.SeedContent(ctx, filepath.Join(target.Path, root), content); err != nil {
+		return zero, 0, err
+	}
+
+	entry := domain.IndexWorkspace{
+		Name: name, Root: root, Mount: spec.Mount, Shell: spec.Shell,
+		Ports: spec.Ports, Up: spec.Up, Secrets: spec.Secrets, Isolation: spec.Isolation,
+	}
+	if image != "" {
+		entry.Images = append([]string{image}, spec.With...)
+	} else if len(spec.With) > 0 {
+		return zero, 0, fmt.Errorf("--with (sidecars) requires --image (the primary container)")
+	}
+	idx.Workspaces = append(idx.Workspaces, entry)
+	vault.Bump(idx)
+	if err := cat.Write(ctx, target, idx); err != nil {
+		return zero, 0, err
+	}
+	return entry, idx.Revision, nil
 }
 
 // seedFrom fills content with an existing workspace's files (its git working

@@ -2,13 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
-	"github.com/JGabrielGruber/neonroot/internal/domain"
-	"github.com/JGabrielGruber/neonroot/internal/vault"
 	"github.com/JGabrielGruber/neonroot/internal/workspace"
 )
 
@@ -42,31 +38,10 @@ it is currently loaded.`,
 		}
 		defer lock.Unlock()
 
-		idx, err := vault.ReadIndex(v.Path)
-		if err != nil {
+		if err := removeWorkspace(v, name); err != nil {
 			return err
 		}
-		entry, ok := vault.Workspace(idx, name)
-		if !ok {
-			return fmt.Errorf("%w: %q in vault %q", domain.ErrWorkspaceNotFound, name, v.Name)
-		}
-
-		if err := os.RemoveAll(filepath.Join(v.Path, entry.Root)); err != nil {
-			return err
-		}
-		kept := idx.Workspaces[:0:0]
-		for _, w := range idx.Workspaces {
-			if w.Name != name {
-				kept = append(kept, w)
-			}
-		}
-		idx.Workspaces = kept
-		vault.Bump(idx)
-		if err := vault.WriteIndex(v.Path, idx); err != nil {
-			return err
-		}
-
-		app.UI.Success(fmt.Sprintf("deleted workspace %q from vault %q (revision %d)", name, v.Name, idx.Revision))
+		app.UI.Success(fmt.Sprintf("deleted workspace %q from vault %q", name, v.Name))
 		return nil
 	},
 }

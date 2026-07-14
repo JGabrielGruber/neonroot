@@ -198,10 +198,20 @@ func (a *App) lock(key string) (*platform.FileLock, error) {
 	return platform.TryLock(filepath.Join(dir, key+".lock"))
 }
 
+// exitError carries a child command's exit code up to Execute so `spawn`/`run`
+// can propagate it without printing an error of our own.
+type exitError struct{ code int }
+
+func (e *exitError) Error() string { return fmt.Sprintf("exit status %d", e.code) }
+
 // Execute runs the CLI, rendering sentinel errors with clear messages and
 // mapping them to stable exit codes.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
+		var ee *exitError
+		if errors.As(err, &ee) {
+			os.Exit(ee.code) // the child already produced its own output
+		}
 		fmt.Fprintln(os.Stderr, "neonroot: "+err.Error())
 		os.Exit(exitCode(err))
 	}

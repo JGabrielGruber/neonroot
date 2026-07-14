@@ -2,12 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/JGabrielGruber/neonroot/internal/domain"
-	"github.com/JGabrielGruber/neonroot/internal/session"
 	"github.com/JGabrielGruber/neonroot/internal/workspace"
 )
 
@@ -30,42 +28,9 @@ them.`,
 		}
 		defer lock.Unlock()
 
-		ws, err := workspace.ReadState(app.Paths, name)
-		if err != nil {
+		if err := stopWorkspace(cmd.Context(), name); err != nil {
 			return err
 		}
-
-		// Kill the session (best-effort — tmux may be absent or already gone).
-		tmux := &session.Tmux{Runner: app.Runner}
-		if tmux.Available() {
-			if err := tmux.Kill(name); err != nil {
-				app.UI.Warn(fmt.Sprintf("could not kill session: %v", err))
-			}
-		}
-
-		// Stop the pod (multi-image) or the single container.
-		if ws.Pod != "" || ws.ContainerID != "" {
-			pod, err := app.podman()
-			if err != nil {
-				return err
-			}
-			if ws.Pod != "" {
-				if err := pod.StopPod(cmd.Context(), ws.Pod); err != nil {
-					app.UI.Warn(fmt.Sprintf("could not stop pod: %v", err))
-				}
-			} else if err := pod.Stop(cmd.Context(), ws.ContainerID); err != nil {
-				app.UI.Warn(fmt.Sprintf("could not stop container: %v", err))
-			}
-		}
-
-		// Drop the tmpfs payload and bookkeeping.
-		if err := os.RemoveAll(app.Paths.WorkspaceRoot(name)); err != nil {
-			return err
-		}
-		if err := os.RemoveAll(app.Paths.WorkspaceStateDir(name)); err != nil {
-			return err
-		}
-
 		app.UI.Success(fmt.Sprintf("stopped and dropped %q (uncommitted changes discarded)", name))
 		return nil
 	},

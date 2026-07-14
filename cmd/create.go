@@ -24,7 +24,19 @@ var (
 	createMountFlag    string
 	createTemplateFlag string
 	createShellFlag    string
+	createWithFlag     string
 )
+
+// splitList parses a comma-separated flag into trimmed, non-empty items.
+func splitList(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 // shellCommand turns a user-supplied shell string into a container command
 // (run via `sh -c`), or nil to use the default (tmux if present, else bash).
@@ -106,7 +118,9 @@ image run host-only).`,
 
 		entry := domain.IndexWorkspace{Name: name, Root: root, Mount: createMountFlag, Shell: shellCommand(createShellFlag)}
 		if image != "" {
-			entry.Images = []string{image}
+			entry.Images = append([]string{image}, splitList(createWithFlag)...)
+		} else if createWithFlag != "" {
+			return fmt.Errorf("--with (sidecars) requires --image (the primary container)")
 		}
 		idx.Workspaces = append(idx.Workspaces, entry)
 		vault.Bump(idx)
@@ -166,5 +180,6 @@ func init() {
 	createCmd.Flags().StringVar(&createMountFlag, "mount", "", "where the workspace mounts inside the container (default: /workspace)")
 	createCmd.Flags().StringVar(&createTemplateFlag, "template", "default", "starter template (see 'neonroot template ls')")
 	createCmd.Flags().StringVar(&createShellFlag, "shell", "", "command to run on attach into the container (default: a login shell)")
+	createCmd.Flags().StringVar(&createWithFlag, "with", "", "sidecar images to run alongside (comma-separated, e.g. postgres,redis)")
 	rootCmd.AddCommand(createCmd)
 }

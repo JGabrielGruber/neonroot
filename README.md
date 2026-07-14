@@ -46,7 +46,7 @@ neonroot attach webapp                       # a shell in the workspace
 neonroot sync                                # re-plug: push all your pending work back
 ```
 
-Run `neonroot` with no arguments for the interactive dashboard *(coming in E1)*.
+Run `neonroot` with no arguments for the interactive cockpit (`--no-tui` to skip).
 
 ## How it works
 

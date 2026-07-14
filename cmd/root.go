@@ -6,12 +6,14 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/JGabrielGruber/neonroot/internal/config"
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 	"github.com/JGabrielGruber/neonroot/internal/runtime"
+	"github.com/JGabrielGruber/neonroot/internal/tui"
 	"github.com/JGabrielGruber/neonroot/internal/ui"
 	"github.com/JGabrielGruber/neonroot/internal/vault"
 )
@@ -33,6 +35,7 @@ type App struct {
 var flags struct {
 	quiet bool
 	plain bool
+	noTUI bool
 }
 
 // app is the process-wide composition root, populated by PersistentPreRunE.
@@ -56,6 +59,17 @@ back to the drive when you choose. It never writes to the SD card.`,
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		// No args on a terminal → open the interactive cockpit; otherwise help.
+		if !flags.plain && !flags.noTUI && !flags.quiet && isatty.IsTerminal(os.Stdout.Fd()) {
+			self, _ := os.Executable()
+			return tui.Run(tui.Deps{
+				Paths:  app.Paths,
+				Config: app.Config,
+				Runner: app.Runner,
+				Self:   self,
+				Theme:  ui.NeonTheme(),
+			})
+		}
 		return cmd.Help()
 	},
 }
@@ -176,4 +190,5 @@ func init() {
 	pf := rootCmd.PersistentFlags()
 	pf.BoolVarP(&flags.quiet, "quiet", "q", false, "suppress progress output, show only warnings")
 	pf.BoolVar(&flags.plain, "plain", false, "disable colored/interactive output")
+	pf.BoolVar(&flags.noTUI, "no-tui", false, "with no subcommand, show help instead of the cockpit")
 }

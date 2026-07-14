@@ -93,6 +93,10 @@ type IndexWorkspace struct {
 	// Up is the command 'neonroot up' runs inside the container (e.g. the dev
 	// server), when none is given on the command line.
 	Up []string `toml:"up,omitempty"`
+	// Secrets opts the workspace into identity passthrough on load: bananenv env
+	// vars + the SSH agent socket + ~/.gitconfig, injected ephemerally into the
+	// container (never on the card). Opt-in because it carries your identity in.
+	Secrets bool `toml:"secrets,omitempty"`
 }
 
 // PrimaryImage returns the image the workspace's shell runs in, or "" for

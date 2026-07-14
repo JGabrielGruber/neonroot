@@ -85,7 +85,11 @@ func overviewStatus(cmd *cobra.Command) error {
 		}
 		fmt.Fprintf(out, "    revision %d, %d workspace(s)\n", idx.Revision, len(idx.Workspaces))
 		for _, w := range idx.Workspaces {
-			fmt.Fprintf(out, "      - %s\n", w.Name)
+			mark := ""
+			if w.Secrets {
+				mark = " (secrets)"
+			}
+			fmt.Fprintf(out, "      - %s%s\n", w.Name, mark)
 		}
 	}
 

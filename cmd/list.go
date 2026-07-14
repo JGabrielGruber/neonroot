@@ -59,6 +59,9 @@ var listCmd = &cobra.Command{
 				if len(w.Images) > 0 {
 					image = strings.Join(w.Images, ",")
 				}
+				if w.Secrets {
+					image += " (secrets)"
+				}
 				fmt.Fprintf(out, "%-14s %-10s %-9s %s\n", w.Name, r.Name, state, image)
 				rows++
 			}

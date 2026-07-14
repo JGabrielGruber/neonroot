@@ -21,6 +21,7 @@ var (
 	setMountFlag       string
 	setShellFlag       string
 	setNoImageFlag     bool
+	setSecretsFlag     bool
 )
 
 var setCmd = &cobra.Command{
@@ -104,6 +105,9 @@ requires the workspace to be stopped first.`,
 		if f.Changed("shell") {
 			entry.Shell = shellCommand(setShellFlag)
 		}
+		if f.Changed("secrets") {
+			entry.Secrets = setSecretsFlag
+		}
 
 		idx.Workspaces[pos] = entry
 		vault.Bump(idx)
@@ -129,5 +133,6 @@ func init() {
 	f.StringVar(&setMountFlag, "mount", "", "set the container mount target")
 	f.StringVar(&setShellFlag, "shell", "", "command to run on attach (empty resets to default: a login shell)")
 	f.BoolVar(&setNoImageFlag, "no-image", false, "make the workspace host-only (clear its images)")
+	f.BoolVar(&setSecretsFlag, "secrets", false, "toggle identity passthrough on load (use --secrets=false to disable)")
 	rootCmd.AddCommand(setCmd)
 }

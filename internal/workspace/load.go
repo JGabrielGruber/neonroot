@@ -13,6 +13,7 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 	"github.com/JGabrielGruber/neonroot/internal/remote"
+	"github.com/JGabrielGruber/neonroot/internal/secrets"
 	"github.com/JGabrielGruber/neonroot/internal/ui"
 	"github.com/JGabrielGruber/neonroot/internal/vault"
 )
@@ -67,6 +68,12 @@ type Loader struct {
 	// degrade gracefully — a failure there never fails a load.
 	Sessions Sessions
 	Runtime  Runtime
+	// Secrets forces identity passthrough on for this load, overriding the
+	// workspace's stored setting (the `load --secrets` flag).
+	Secrets bool
+	// EnvFile is an optional extra dotenv file whose vars are injected into the
+	// container (the `load --env-file` flag).
+	EnvFile string
 	// NoContainer forces host-only even when a workspace declares an image.
 	NoContainer bool
 	// Clean discards an already-loaded clone (uncommitted work included) and
@@ -168,7 +175,14 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 	// a host tmux session.
 	containerized := false
 	if len(entry.Images) > 0 && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
-		if cid, err := l.startContainer(ctx, v, entry, name, dst, domain.SessionOpts{}); err != nil {
+		opts, warns, serr := l.buildSecrets(ctx, entry, name)
+		for _, w := range warns {
+			l.UI.Warn(w)
+		}
+		if serr != nil {
+			return nil, serr
+		}
+		if cid, err := l.startContainer(ctx, v, entry, name, dst, opts); err != nil {
 			l.UI.Warn(fmt.Sprintf("container not started (host-only): %v", err))
 		} else {
 			ws.ContainerID = cid
@@ -221,6 +235,21 @@ func (l *Loader) startContainer(ctx context.Context, v domain.Vault, entry domai
 	}
 	l.UI.Step(fmt.Sprintf("starting pod (%s + %d sidecar(s))", entry.Images[0], len(refs)-1))
 	return l.Runtime.StartPod(ctx, containerName(name), refs, containerName(name), dst, entry.Mount, entry.Ports, opts)
+}
+
+// buildSecrets assembles the container's ephemeral identity when the workspace
+// opts in (its Secrets flag or the --secrets override) or an extra --env-file is
+// given; the env-file lands in the workspace's tmpfs state dir (cleaned on stop).
+func (l *Loader) buildSecrets(ctx context.Context, entry domain.IndexWorkspace, name string) (domain.SessionOpts, []string, error) {
+	identity := entry.Secrets || l.Secrets
+	if !identity && l.EnvFile == "" {
+		return domain.SessionOpts{}, nil, nil
+	}
+	return secrets.Build(ctx, l.Runner, secrets.Options{
+		Identity:     identity,
+		ExtraEnvFile: l.EnvFile,
+		EnvDir:       l.Paths.WorkspaceStateDir(name),
+	})
 }
 
 // fetchRemoteImage downloads a remote vault's images/<img>/image.tar into a

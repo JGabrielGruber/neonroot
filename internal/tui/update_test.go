@@ -91,6 +91,54 @@ func TestInputEscCancels(t *testing.T) {
 	}
 }
 
+func TestDeleteConfirmFlow(t *testing.T) {
+	m := withOne(true)
+	// 'd' arms a confirmation, does not dispatch yet.
+	nm, cmd := m.updateKey(runes("d"))
+	m = nm.(model)
+	if !m.confirming || cmd != nil {
+		t.Fatal("'d' should arm a confirm without dispatching")
+	}
+	// A non-'y' key cancels without deleting.
+	nm, cmd = m.updateConfirm(runes("n"))
+	m = nm.(model)
+	if m.confirming || cmd != nil {
+		t.Fatal("a non-'y' key should cancel the delete")
+	}
+	// Re-arm and confirm with 'y' → dispatches rm.
+	nm, _ = m.updateKey(runes("d"))
+	m = nm.(model)
+	if _, cmd := m.updateConfirm(runes("y")); cmd == nil {
+		t.Error("'y' should dispatch the delete")
+	}
+}
+
+func TestRenameInputDispatches(t *testing.T) {
+	m := withOne(false)
+	nm, _ := m.updateKey(runes("e"))
+	m = nm.(model)
+	if !m.inputting || m.inputKind != "rename" || m.target.name != "app" {
+		t.Fatalf("'e' should start a rename prompt for the selected workspace, got %+v", m)
+	}
+	for _, r := range []string{"n", "e", "w"} {
+		nm, _ := m.updateInput(runes(r))
+		m = nm.(model)
+	}
+	if _, cmd := m.updateInput(key(tea.KeyEnter)); cmd == nil {
+		t.Error("enter with a new name should dispatch the rename")
+	}
+}
+
+func TestCreateWithImageParsesInput(t *testing.T) {
+	m := withOne(false)
+	nm, _ := m.updateKey(runes("n"))
+	m = nm.(model)
+	m.input = "api node" // name + image
+	if _, cmd := m.updateInput(key(tea.KeyEnter)); cmd == nil {
+		t.Error("create with 'name image' should dispatch")
+	}
+}
+
 func TestActionErrorSurfaced(t *testing.T) {
 	m := withOne(true)
 	nm, _ := m.Update(actionDoneMsg{err: errNoSelf})

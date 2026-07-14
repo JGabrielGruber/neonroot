@@ -5,10 +5,13 @@ import tea "github.com/charmbracelet/bubbletea"
 type model struct {
 	deps          Deps
 	snap          snapshot
-	cursor        int  // index into the flat selectable-workspace list
-	refreshing    bool // a snapshot is in flight (prevents overlap)
-	loaded        bool // first snapshot has arrived
-	inputting     bool // capturing a new-workspace name
+	cursor        int    // index into the flat selectable-workspace list
+	refreshing    bool   // a snapshot is in flight (prevents overlap)
+	loaded        bool   // first snapshot has arrived
+	inputting     bool   // capturing text (a name) for inputKind
+	inputKind     string // what the text prompt commits: "create" | "rename"
+	confirming    bool   // a destructive action (delete) awaits y/N
+	target        wsRow  // subject of a rename/delete prompt
 	input         string
 	busy          string // a background action is running (its label), else ""
 	status        string // last action's result line

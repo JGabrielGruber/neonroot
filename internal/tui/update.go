@@ -13,6 +13,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.confirming {
+			return m.updateConfirm(msg)
+		}
 		if m.inputting {
 			return m.updateInput(msg)
 		}
@@ -67,13 +70,32 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "n": // new workspace
+	case "n": // new workspace: "name [image]"
 		if m.busy != "" {
 			return m, nil
 		}
 		m.inputting = true
+		m.inputKind = "create"
 		m.input = ""
 		m.status = ""
+		return m, nil
+
+	case "e": // rename the selected workspace (CLI refuses if it's loaded)
+		if w, ok := m.selected(); ok && m.busy == "" {
+			m.inputting = true
+			m.inputKind = "rename"
+			m.target = w
+			m.input = ""
+			m.status = ""
+		}
+		return m, nil
+
+	case "d": // delete the selected workspace (confirm first — destructive)
+		if w, ok := m.selected(); ok && m.busy == "" {
+			m.confirming = true
+			m.target = w
+			m.status = ""
+		}
 		return m, nil
 
 	// attach hands over the terminal; every other action runs in the background
@@ -115,13 +137,23 @@ func (m model) bgAction(label string, args ...string) (tea.Model, tea.Cmd) {
 func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		name := strings.TrimSpace(m.input)
+		text := strings.TrimSpace(m.input)
+		kind, target := m.inputKind, m.target
 		m.inputting = false
 		m.input = ""
-		if name != "" {
-			return m.bgAction("creating "+name, "create", name)
+		if text == "" {
+			return m, nil
 		}
-		return m, nil
+		if kind == "rename" {
+			return m.bgAction("renaming "+target.name, "set", target.name, "--vault", target.vaultName, "--rename", text)
+		}
+		// create: first token is the name, an optional second is the image.
+		fields := strings.Fields(text)
+		args := []string{"create", fields[0]}
+		if len(fields) > 1 {
+			args = append(args, "--image", fields[1])
+		}
+		return m.bgAction("creating "+fields[0], args...)
 	case "esc":
 		m.inputting = false
 		m.input = ""
@@ -135,6 +167,20 @@ func (m model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if s := msg.String(); len(s) == 1 {
 			m.input += s
 		}
+		return m, nil
+	}
+}
+
+// updateConfirm handles the y/N gate before a destructive delete. Only an
+// explicit 'y' proceeds; any other key cancels.
+func (m model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	target := m.target
+	m.confirming = false
+	switch msg.String() {
+	case "y", "Y":
+		return m.bgAction("deleting "+target.name, "rm", target.name, "--vault", target.vaultName)
+	default:
+		m.status = "delete cancelled"
 		return m, nil
 	}
 }

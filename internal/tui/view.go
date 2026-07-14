@@ -40,8 +40,15 @@ func (m model) View() string {
 		b.WriteString("\n")
 	}
 
+	if m.confirming {
+		b.WriteString(" " + th.Warn.Render(fmt.Sprintf("delete %q? (y/N)", m.target.name)) + "\n")
+	}
 	if m.inputting {
-		b.WriteString(" " + th.Accent.Render("new workspace: ") + th.Step.Render(m.input+"▌") + "\n")
+		label := "new workspace (name [image]): "
+		if m.inputKind == "rename" {
+			label = fmt.Sprintf("rename %s → ", m.target.name)
+		}
+		b.WriteString(" " + th.Accent.Render(label) + th.Step.Render(m.input+"▌") + "\n")
 	}
 	if m.busy != "" {
 		b.WriteString(" " + th.Step.Render("⟳ "+m.busy+"…") + "\n")
@@ -52,7 +59,7 @@ func (m model) View() string {
 		}
 		b.WriteString(" " + style.Render(m.status) + "\n")
 	}
-	b.WriteString(footer(th, m.inputting))
+	b.WriteString(m.footer(th))
 	return b.String()
 }
 
@@ -111,11 +118,16 @@ func syncMark(th ui.Theme, r workspace.Report) string {
 	}
 }
 
-func footer(th ui.Theme, inputting bool) string {
-	if inputting {
-		return "\n " + th.Muted.Render("type a name · enter create · esc cancel") + "\n"
+func (m model) footer(th ui.Theme) string {
+	switch {
+	case m.confirming:
+		return "\n " + th.Muted.Render("y confirm delete · any other key cancel") + "\n"
+	case m.inputting && m.inputKind == "rename":
+		return "\n " + th.Muted.Render("type the new name · enter rename · esc cancel") + "\n"
+	case m.inputting:
+		return "\n " + th.Muted.Render("type name [image] · enter create · esc cancel") + "\n"
 	}
-	keys := "↑/↓ move · l load · a attach · c commit · x stop · n new · y sync · r refresh · q quit"
+	keys := "↑/↓ move · l load · a attach · c commit · x stop · n new · e rename · d delete · y sync · r refresh · q quit"
 	return "\n " + th.Muted.Render(keys) + "\n"
 }
 

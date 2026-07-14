@@ -13,6 +13,7 @@ import (
 	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/git"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
+	"github.com/JGabrielGruber/neonroot/internal/remote"
 	"github.com/JGabrielGruber/neonroot/internal/runtime"
 	"github.com/JGabrielGruber/neonroot/internal/tui"
 	"github.com/JGabrielGruber/neonroot/internal/ui"
@@ -148,6 +149,15 @@ func (a *App) requireAvailable(r domain.Vault) error {
 // the tmpfs cache.
 func (a *App) catalog() vault.Catalog {
 	return vault.Catalog{Git: &git.Git{Runner: a.Runner}, Runner: a.Runner, CacheDir: a.Paths.Cache}
+}
+
+// transport builds the ssh/scp transport for a remote vault.
+func (a *App) transport(v domain.Vault) (remote.Transport, error) {
+	addr, err := remote.Parse(v.Remote)
+	if err != nil {
+		return remote.Transport{}, err
+	}
+	return remote.Transport{Runner: a.Runner, Addr: addr}, nil
 }
 
 // podman builds the Podman adapter with storage pinned to tmpfs, creating the

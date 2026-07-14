@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 
+	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/runtime"
 	"github.com/JGabrielGruber/neonroot/internal/template"
 	"github.com/JGabrielGruber/neonroot/internal/vault"
@@ -42,6 +44,9 @@ powertools). Edit it, then 'neonroot image build <name>'.`,
 		if err := app.requireAvailable(v); err != nil {
 			return err
 		}
+		if v.IsRemote() {
+			return createRemoteImage(cmd, v, name)
+		}
 		dir := vault.ImageDir(v.Path, name)
 		if _, err := os.Stat(dir); err == nil {
 			return fmt.Errorf("image %q already exists in vault %q", name, v.Name)
@@ -56,6 +61,34 @@ powertools). Edit it, then 'neonroot image build <name>'.`,
 		app.UI.Info(fmt.Sprintf("edit %s, then 'neonroot image build %s'", vault.ContainerfilePath(v.Path, name), name))
 		return nil
 	},
+}
+
+// createRemoteImage scaffolds the image into a tmpfs staging dir and uploads it
+// to the remote vault's images/<name>/ over scp.
+func createRemoteImage(cmd *cobra.Command, v domain.Vault, name string) error {
+	stage := filepath.Join(app.Paths.Cache, "imgstage", name)
+	_ = os.RemoveAll(stage)
+	defer os.RemoveAll(stage)
+	if err := template.WriteImage(imageTemplateFlag, stage, name); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("no image template %q (available: %v)", imageTemplateFlag, template.ImageTemplates())
+		}
+		return err
+	}
+	t, err := app.transport(v)
+	if err != nil {
+		return err
+	}
+	if err := t.Mkdir(cmd.Context(), "images"); err != nil {
+		return fmt.Errorf("preparing remote images dir: %w", err)
+	}
+	app.UI.Step(fmt.Sprintf("uploading image %q to %q", name, v.Name))
+	if err := t.UploadDir(cmd.Context(), stage, "images"); err != nil {
+		return err
+	}
+	app.UI.Success(fmt.Sprintf("created image %q in vault %q (template %q)", name, v.Name, imageTemplateFlag))
+	app.UI.Info(fmt.Sprintf("build it with 'neonroot image build %s' (fetches, builds, uploads the data)", name))
+	return nil
 }
 
 var imageBuildCmd = &cobra.Command{
@@ -73,10 +106,6 @@ saves the result as image.tar in the vault, so a later load can run it offline.`
 		if err := app.requireAvailable(v); err != nil {
 			return err
 		}
-		cfile := vault.ContainerfilePath(v.Path, name)
-		if _, err := os.Stat(cfile); err != nil {
-			return fmt.Errorf("no Containerfile for image %q — run 'neonroot image create %s' first", name, name)
-		}
 
 		pod, err := app.podman()
 		if err != nil {
@@ -92,6 +121,14 @@ saves the result as image.tar in the vault, so a later load can run it offline.`
 		}
 		defer lock.Unlock()
 
+		if v.IsRemote() {
+			return buildRemoteImage(cmd, v, name, pod)
+		}
+
+		cfile := vault.ContainerfilePath(v.Path, name)
+		if _, err := os.Stat(cfile); err != nil {
+			return fmt.Errorf("no Containerfile for image %q — run 'neonroot image create %s' first", name, name)
+		}
 		ref := vault.ImageRef(name)
 		app.UI.Step(fmt.Sprintf("building image %q", name))
 		if err := pod.Build(cmd.Context(), ref, vault.ImageDir(v.Path, name)); err != nil {
@@ -106,6 +143,48 @@ saves the result as image.tar in the vault, so a later load can run it offline.`
 	},
 }
 
+// buildRemoteImage fetches the image's build context from the remote vault into
+// tmpfs, builds and saves it locally, then uploads the resulting image.tar back
+// to the vault — the online build step for a server-hosted vault.
+func buildRemoteImage(cmd *cobra.Command, v domain.Vault, name string, pod *runtime.Podman) error {
+	t, err := app.transport(v)
+	if err != nil {
+		return err
+	}
+	parent := filepath.Join(app.Paths.Cache, "imgbuild", v.Name)
+	_ = os.RemoveAll(parent)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return err
+	}
+	defer os.RemoveAll(parent)
+
+	app.UI.Step(fmt.Sprintf("fetching build context for %q from %q", name, v.Name))
+	if err := t.FetchDir(cmd.Context(), path.Join("images", name), parent); err != nil {
+		return fmt.Errorf("fetching image %q build context: %w", name, err)
+	}
+	buildCtx := filepath.Join(parent, name)
+	if _, err := os.Stat(filepath.Join(buildCtx, "Containerfile")); err != nil {
+		return fmt.Errorf("no Containerfile for image %q — run 'neonroot image create %s' first", name, name)
+	}
+
+	ref := vault.ImageRef(name)
+	app.UI.Step(fmt.Sprintf("building image %q", name))
+	if err := pod.Build(cmd.Context(), ref, buildCtx); err != nil {
+		return err
+	}
+	localTar := filepath.Join(buildCtx, "image.tar")
+	app.UI.Step("saving image data")
+	if err := pod.Save(cmd.Context(), ref, localTar); err != nil {
+		return err
+	}
+	app.UI.Step(fmt.Sprintf("uploading image data to %q", v.Name))
+	if err := t.Upload(cmd.Context(), localTar, path.Join("images", name, "image.tar")); err != nil {
+		return err
+	}
+	app.UI.Success(fmt.Sprintf("built and stored image %q in vault %q", name, v.Name))
+	return nil
+}
+
 var imageLsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List images stored in a vault",
@@ -117,6 +196,9 @@ var imageLsCmd = &cobra.Command{
 		}
 		if err := app.requireAvailable(v); err != nil {
 			return err
+		}
+		if v.IsRemote() {
+			return listRemoteImages(cmd, v)
 		}
 		entries, err := os.ReadDir(filepath.Join(v.Path, "images"))
 		if err != nil {
@@ -142,6 +224,35 @@ var imageLsCmd = &cobra.Command{
 	},
 }
 
+// listRemoteImages lists a remote vault's images from its catalog (the images
+// referenced by its workspaces), avoiding an extra ssh round trip. BUILT/SIZE are
+// unknown without stat'ing the remote, so they read "?"; images scaffolded but
+// not yet referenced by a workspace are not shown.
+func listRemoteImages(cmd *cobra.Command, v domain.Vault) error {
+	idx, err := app.catalog().Read(cmd.Context(), v)
+	if err != nil {
+		return err
+	}
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "%-16s %-8s %s\n", "IMAGE", "BUILT", "SIZE")
+	seen := map[string]bool{}
+	for _, w := range idx.Workspaces {
+		for _, img := range w.Images {
+			if seen[img] {
+				continue
+			}
+			seen[img] = true
+			fmt.Fprintf(out, "%-16s %-8s %s\n", img, "?", "-")
+		}
+	}
+	if len(seen) == 0 {
+		app.UI.Info("no images referenced in this vault's catalog")
+		return nil
+	}
+	app.UI.Info("(remote: listed from the catalog — only images used by a workspace)")
+	return nil
+}
+
 var imageRmCmd = &cobra.Command{
 	Use:   "rm <name>",
 	Short: "Remove an image (definition + data) from a vault",
@@ -157,6 +268,9 @@ never removes a shared image.`,
 		}
 		if err := app.requireAvailable(v); err != nil {
 			return err
+		}
+		if v.IsRemote() {
+			return errRemoteImageUnsupported("rm")
 		}
 		dir := vault.ImageDir(v.Path, name)
 		if _, err := os.Stat(dir); err != nil {
@@ -210,6 +324,9 @@ vault. This is how inside-container changes become durable and reproducible.`,
 		if err := app.requireAvailable(v); err != nil {
 			return err
 		}
+		if v.IsRemote() {
+			return errRemoteImageUnsupported("snapshot")
+		}
 		pod, err := app.podman()
 		if err != nil {
 			return err
@@ -254,6 +371,9 @@ stored image data, and updates every workspace that references it.`,
 		}
 		if err := app.requireAvailable(v); err != nil {
 			return err
+		}
+		if v.IsRemote() {
+			return errRemoteImageUnsupported("set")
 		}
 		if _, err := os.Stat(vault.ImageDir(v.Path, name)); err != nil {
 			return fmt.Errorf("no image %q in vault %q", name, v.Name)
@@ -310,6 +430,13 @@ stored image data, and updates every workspace that references it.`,
 		app.UI.Success(fmt.Sprintf("renamed image %q → %q in vault %q", name, newName, v.Name))
 		return nil
 	},
+}
+
+// errRemoteImageUnsupported reports an image mutation not yet wired for remote
+// vaults, so it fails clearly instead of silently writing to an empty path.
+func errRemoteImageUnsupported(op string) error {
+	return fmt.Errorf("'image %s' is not yet supported for remote vaults — "+
+		"do it on a machine with the vault local, or use image create/build/ls", op)
 }
 
 // podBaseArgs exposes the storage-pinning args for ad-hoc podman calls.

@@ -35,6 +35,38 @@ func TestTransport_FetchAndUpload(t *testing.T) {
 	}
 }
 
+func TestTransport_DirsInitAndMkdir(t *testing.T) {
+	rec := runnertest.New()
+	addr, _ := Parse("ssh://git@host:2222/srv/vault")
+	tr := Transport{Runner: rec, Addr: addr}
+	ctx := context.Background()
+
+	if err := tr.FetchDir(ctx, "images/dev", "/tmp/build"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.UploadDir(ctx, "/tmp/stage/dev", "images"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.Mkdir(ctx, "images"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.InitBare(ctx, "_catalog.git"); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"scp -r -P 2222 git@host:/srv/vault/images/dev /tmp/build",
+		"scp -r -P 2222 /tmp/stage/dev git@host:/srv/vault/images",
+		"ssh -p 2222 git@host mkdir -p '/srv/vault/images'",
+		"ssh -p 2222 git@host git init --bare -q '/srv/vault/_catalog.git' && git --git-dir='/srv/vault/_catalog.git' symbolic-ref HEAD refs/heads/main",
+	}
+	for i, w := range want {
+		if got := rec.Lines()[i]; got != w {
+			t.Errorf("line %d:\n got %q\nwant %q", i, got, w)
+		}
+	}
+}
+
 func TestTransport_NoPortAndIPv6(t *testing.T) {
 	rec := runnertest.New()
 	addr, _ := Parse("ssh://[::1]/srv/vault")

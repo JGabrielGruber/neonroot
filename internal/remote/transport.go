@@ -32,9 +32,10 @@ func (t Transport) scpRemote(rel string) string {
 	return ui + host + ":" + t.Addr.RemotePath(rel)
 }
 
-// scpArgs prepends the port flag (scp uses -P, not -p) when a port is set.
-func (t Transport) scpArgs(src, dst string) []string {
-	var args []string
+// scpArgs prepends the port flag (scp uses -P, not -p) and any leading flags
+// (e.g. -r) before the src/dst pair.
+func (t Transport) scpArgs(flags []string, src, dst string) []string {
+	args := append([]string{}, flags...)
 	if t.Addr.Port != "" {
 		args = append(args, "-P", t.Addr.Port)
 	}
@@ -44,14 +45,35 @@ func (t Transport) scpArgs(src, dst string) []string {
 // Fetch copies a vault-relative remote file (e.g. images/dev/image.tar) to a
 // local path, typically in tmpfs before a podman load.
 func (t Transport) Fetch(ctx context.Context, remoteRel, localDst string) error {
-	_, err := t.Runner.Run(ctx, "scp", t.scpArgs(t.scpRemote(remoteRel), localDst)...)
+	_, err := t.Runner.Run(ctx, "scp", t.scpArgs(nil, t.scpRemote(remoteRel), localDst)...)
 	return err
 }
 
 // Upload copies a local file to a vault-relative remote path (e.g. a freshly
 // saved image.tar). Used when building/snapshotting images against a remote.
 func (t Transport) Upload(ctx context.Context, localSrc, remoteRel string) error {
-	_, err := t.Runner.Run(ctx, "scp", t.scpArgs(localSrc, t.scpRemote(remoteRel))...)
+	_, err := t.Runner.Run(ctx, "scp", t.scpArgs(nil, localSrc, t.scpRemote(remoteRel))...)
+	return err
+}
+
+// FetchDir recursively copies a vault-relative remote directory (e.g. an image's
+// build context) to a local parent, so it lands at localParent/<basename>.
+func (t Transport) FetchDir(ctx context.Context, remoteRel, localParent string) error {
+	_, err := t.Runner.Run(ctx, "scp", t.scpArgs([]string{"-r"}, t.scpRemote(remoteRel), localParent)...)
+	return err
+}
+
+// UploadDir recursively copies a local directory to a vault-relative remote path.
+func (t Transport) UploadDir(ctx context.Context, localSrc, remoteRel string) error {
+	_, err := t.Runner.Run(ctx, "scp", t.scpArgs([]string{"-r"}, localSrc, t.scpRemote(remoteRel))...)
+	return err
+}
+
+// Mkdir creates a vault-relative remote directory (and parents) over ssh, so an
+// upload target exists before scp runs.
+func (t Transport) Mkdir(ctx context.Context, remoteRel string) error {
+	_, err := t.Runner.Run(ctx, "ssh",
+		t.sshArgs("mkdir -p "+shellArg(t.Addr.RemotePath(remoteRel)))...)
 	return err
 }
 

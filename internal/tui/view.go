@@ -40,7 +40,13 @@ func (m model) View() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(footer(th))
+	if m.inputting {
+		b.WriteString(" " + th.Accent.Render("new workspace: ") + th.Step.Render(m.input+"▌") + "\n")
+	}
+	if m.lastErr != "" {
+		b.WriteString(" " + th.Error.Render(m.lastErr) + "\n")
+	}
+	b.WriteString(footer(th, m.inputting))
 	return b.String()
 }
 
@@ -99,8 +105,12 @@ func syncMark(th ui.Theme, r workspace.Report) string {
 	}
 }
 
-func footer(th ui.Theme) string {
-	return "\n " + th.Muted.Render("↑/↓ move · r refresh · q quit") + "\n"
+func footer(th ui.Theme, inputting bool) string {
+	if inputting {
+		return "\n " + th.Muted.Render("type a name · enter create · esc cancel") + "\n"
+	}
+	keys := "↑/↓ move · l load · a attach · c commit · x stop · n new · y sync · r refresh · q quit"
+	return "\n " + th.Muted.Render(keys) + "\n"
 }
 
 func humanSize(n int64) string {

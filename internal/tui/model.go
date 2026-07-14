@@ -8,6 +8,9 @@ type model struct {
 	cursor        int  // index into the flat selectable-workspace list
 	refreshing    bool // a snapshot is in flight (prevents overlap)
 	loaded        bool // first snapshot has arrived
+	inputting     bool // capturing a new-workspace name
+	input         string
+	lastErr       string // last action's error, shown in a status line
 	width, height int
 }
 

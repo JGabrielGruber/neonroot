@@ -172,6 +172,7 @@ injected secrets are redirected to tmpfs.
 
 ## Docs
 
+- [`AGENTS.md`](AGENTS.md) — for AI agents: using NeonRoot as a sandbox, and developing it
 - [`VISION.md`](docs/VISION.md) — market position & where this is going
 - [`ROADMAP.md`](docs/ROADMAP.md) — what's next (E1–E4)
 - [`PRINCIPLES.md`](docs/PRINCIPLES.md) — the design tenets

@@ -1,122 +1,98 @@
 # NeonRoot
 
-A lightweight, portable workspace manager for ephemeral development environments.
+**Git for your dev environment's *location*.** Carry a full, containerized fullstack
+toolbelt on a drive, work with it unplugged, and sync when you choose — no cloud, no
+daemon, no account.
 
-**Philosophy**: Complex simplicity — plug briefly, work untethered.
+> *Complex simplicity — plug briefly, work untethered.*
 
-NeonRoot hydrates development workspaces from cold storage (an external drive)
-into tmpfs so you can unplug and work untethered, then commit changes back to the
-drive when you choose. It never writes to the SD card it boots from.
+---
 
-NeonRoot is **workspace-first**: you name a workspace, and it uses a **vault**
-(where it's stored — a git repo per workspace) and optionally an image (what it
-runs in). You configure a vault once and then work by workspace name.
+## What it is
 
-## Commands
+NeonRoot is a **hot/cold storage manager for dev workspaces**. A **vault** (a directory
+on an external drive — or any write-controlled location) holds a git repo per workspace
+plus its container image data. `load` clones a workspace into **tmpfs/RAM** so you can
+unplug the drive and work untethered; `commit` pushes your changes back when you
+reconnect. It boots from a minimal Arch SD card and **never writes to that card**.
 
-Workspace commands (the everyday surface):
+The one thing nobody else does: cloud CDEs (Coder, Codespaces) move your environment
+*to the network*; Nix/Devbox make it *reproducible*; distrobox makes it *local* —
+NeonRoot makes it **portable, offline, and sync-controlled.** It's a single ~8 MB static
+binary. (See [`docs/VISION.md`](docs/VISION.md) for the full market position.)
 
-| Command   | Purpose |
-|-----------|---------|
-| `list`    | List your workspaces (vault, image, loaded state) |
-| `create <name>` | Create a workspace (bare git repo) — default template or `--from <ws>`, optional `--image` |
-| `load <name>`   | `git clone` a workspace into tmpfs; start its container (if image) |
-| `attach <name>` | Open a shell in the workspace (execs into its container) |
-| `commit <name>` | `git commit` + `git push` back (refuses on conflict; `--rebase`/`--as`/`--force`) |
-| `status [name]` | Vault overview, or a workspace's live git state (dirty/ahead/behind) |
-| `snapshot <name> <label>` | Tag a durable point-in-time copy of the workspace |
-| `set <name> [flags]` | Edit attributes — `--rename`, `--image`, `--add-image`, `--remove-image`, `--mount`, `--shell`, `--no-image` |
-| `stop <name>`   | Stop the container/pod + session and drop the tmpfs copy |
-| `rm <name>`     | Delete a workspace from its vault (stop it first) |
+## Who it's for
 
-Sessions: a **containerized** workspace's `attach` execs a plain shell into the
-container (bash/sh) — NeonRoot doesn't impose tmux, so it never nests inside the
-tmux you already run on the host. The image still ships tmux + configs; opt in
-with `create/set --shell "tmux new-session -A -s main"` or just run `tmux`
-inside. A **host-only** workspace uses a host tmux session, recreated if you
-exited it (Ctrl-D). The workspace/container persists until `stop`.
+Nomadic and constrained-hardware developers (minimal OS on an SD card, heavy env on a
+USB/SSD); sovereign / air-gapped / privacy work; homelab tinkerers who want portability
+on top of local; anyone who wants to plug into a borrowed machine, work, and leave
+nothing behind.
 
-Image management (`neonroot image …`):
-
-| Command | Purpose |
-|---------|---------|
-| `image create <name>` | Scaffold a Containerfile in the vault |
-| `image build <name>`  | Build (online) + save the image's data into the vault |
-| `image ls` / `rm <name>` | List / remove vault images |
-| `image set <name> --rename <new>` | Rename an image (re-tags data + updates workspaces) |
-| `image snapshot <ws>` | Commit a running container back into its vault image |
-
-A workspace with one image runs as a container; with several, as a podman pod
-(primary + sidecars sharing localhost).
-
-Templates (`neonroot template …`) seed new workspaces (`create --template <name>`):
-
-| Command | Purpose |
-|---------|---------|
-| `template ls` | List templates (shipped + your own) |
-| `template new <name>` | Scaffold a user template to customize |
-| `template path` | Print the user templates directory |
-
-Shipped templates are embedded; your own live in
-`$XDG_CONFIG_HOME/neonroot/templates/<name>/` (a same-named user template wins).
-`{{workspace}}` in any file is replaced with the workspace name. This is where
-dev ergonomics live — editor configs, a `.tmux.conf`, scaffolding — so rich
-setups are shareable data, not baked into the binary.
-
-Vault setup (one-time):
-
-| Command | Purpose |
-|---------|---------|
-| `vault add <name> <path>` | Register a vault; the first becomes the default |
-| `vault list`              | List vaults and availability |
-| `vault set-default <name>`| Change the default vault |
-| `vault set <name> [--rename\|--path]` | Edit a vault's registration |
-| `vault rm <name>`         | Unregister a vault (drive data untouched) |
-
-Workspace commands default to the configured default vault (no `--vault` needed);
-pass `--vault` to target another. Global: `--quiet`/`-q`, `--plain`.
-`load` takes `--no-session`, `--no-container`, and `--clean` (re-clone fresh);
-`commit` takes `-m <message>`.
-
-Requires `git` on PATH; `tmux`/`podman` optional (degrade to host-only).
-Integration tests run with `go test -tags integration ./...`.
-
-## Architecture
-
-```
-cmd/                  thin Cobra commands (RunE) → use-case methods
-internal/
-  domain/             pure types + sentinel errors (no I/O)
-  platform/           SD-safe paths, mountinfo, flock, statfs, exec runner
-  ui/                 Reporter interface + Lip Gloss neon theme
-  config/             TOML user config + vault registry
-  vault/              resolution, availability, index.toml (the catalog)
-  git/                git adapter: workspaces are bare repos in the vault
-  workspace/          load orchestration (clone + session/container seams)
-  session/ runtime/   tmux / podman adapters (via platform.Runner)
-  template/           embedded + user workspace and image templates
-```
-
-Config lives on the SD card (`$XDG_CONFIG_HOME/neonroot/config.toml`); all state,
-workspaces, and locks are redirected to tmpfs (`/run/user/$UID`, `/tmp`).
-The vault stores the catalog (`index.toml`) and a bare git repo per workspace.
-
-## Quick Start
+## Quick start
 
 ```bash
 go build -o neonroot .
 
-neonroot vault add ext /mnt/ext/neonroot   # one-time: becomes the default vault
+neonroot vault add ext /mnt/ext/neonroot     # one-time; the first vault becomes default
 
-# Optional: a batteries-included dev image (build once, online → stored in the vault)
+# Optional: a batteries-included dev image (nvim+LazyVim, tmux, starship, powertools)
 neonroot image create dev --template arch-dev
-neonroot image build dev
+neonroot image build dev                     # build once (online) → stored in the vault
 
-neonroot create webapp --image dev         # or omit --image for host-only
-neonroot load webapp                       # git clone + container; unplug the drive
-neonroot attach webapp                     # shell in the workspace/container
-# ... work untethered (commit locally offline) ...
-neonroot commit webapp                     # re-plug, push changes back
+neonroot create webapp --image dev           # or omit --image for host-only
+neonroot load webapp                         # git clone into RAM + start its container
+neonroot attach webapp                       # a shell in the workspace
+#   … unplug the drive, work untethered, commit locally offline …
+neonroot sync                                # re-plug: push all your pending work back
 ```
 
-Version: **0.0.2**
+Run `neonroot` with no arguments for the interactive dashboard *(coming in E1)*.
+
+## How it works
+
+```
+  VAULT (cold, on the drive)                HOT (tmpfs / RAM)
+  ├─ index.toml         (catalog)   load →  git clone  ──► work untethered
+  ├─ workspaces/<w>.git (content)   commit  git push   ◄──  (commit offline)
+  └─ images/<w>/image.tar (env)     load →  podman load ──► container / pod
+```
+
+A workspace is a normal git repo and a normal host directory — open it in any editor. A
+workspace with one image runs as a container; with several, as a podman pod (app +
+sidecars over localhost). Ergonomics (editor, shell, tmux) live in **editable image and
+workspace templates**, not the binary.
+
+## Commands
+
+**Workspaces** (the everyday surface):
+`create` · `load` · `attach` · `commit` · `sync` · `status` · `snapshot` · `set` ·
+`stop` · `rm` · `list` · `path`/`code` · `doctor` · `guard`
+
+**Vaults** (one-time setup): `vault add` · `list` · `set-default` · `set` · `rm`
+
+**Images**: `image create --template <minimal|arch-dev>` · `build` · `ls` · `set --rename`
+· `rm` · `snapshot`
+
+**Templates**: `template ls` · `new` · `path` — plus `create --template <name>` and
+`--from <workspace>`.
+
+Conflicts on `commit` resolve with `--rebase` / `--merge` / `--as <branch>` / `--force`
+(→ `git push --force-with-lease`, never a bare force). Full flags via `--help`.
+
+## Requirements
+
+Linux (Arch/Manjaro-first). **`git`** required; **`tmux`** / **`podman`** optional —
+NeonRoot degrades to host-only when they're absent. Config lives on the card; all state,
+clones, and locks are redirected to tmpfs.
+
+## Docs
+
+- [`VISION.md`](docs/VISION.md) — market position & where this is going
+- [`ROADMAP.md`](docs/ROADMAP.md) — what's next (E1–E4)
+- [`PRINCIPLES.md`](docs/PRINCIPLES.md) — the design tenets
+- [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how it's built
+- [`CHANGELOG.md`](CHANGELOG.md) — what's shipped
+
+---
+
+Pre-1.0 · Linux-first · MIT

@@ -81,6 +81,23 @@ Env values go via podman `--env-file` (never in `ps`); only the SSH **agent sock
 forwarded, so your private key never enters the container. It's opt-in and shown as a
 `(secrets)` marker in `list`/`status`, because the workspace then carries your identity.
 
+## CI / self-test in a box
+
+The `ci` image (alpine + Go + git + a self-contained passwordless-localhost sshd) plus
+`--seed` and `run` turn any repo into a hermetic, containerized test sandbox — this is how
+NeonRoot tests *itself*:
+
+```bash
+neonroot image create ci --template ci && neonroot image build ci
+neonroot create proj --image ci --seed .        # import this repo as a workspace
+neonroot load proj
+neonroot run proj -- sh -c 'ensure-sshd && go test -tags integration ./...'
+```
+
+Because the container carries its own sshd, NeonRoot's ssh/rsync integration tests run
+*inside* it without touching the host's ssh config. (Dogfooding this way already caught a
+real catalog-over-ssh bug the mocked unit tests missed.)
+
 ## How it works
 
 ```
@@ -98,18 +115,20 @@ workspace templates**, not the binary.
 ## Commands
 
 **Workspaces** (the everyday surface):
-`create` · `load` · `attach` · `up` · `commit` · `sync` · `status` · `snapshot` ·
-`set` · `stop` · `rm` · `list` · `path`/`code` · `doctor` · `guard`
+`create` · `load` · `attach` · `up` · `run` · `logs` · `commit` · `sync` · `status` ·
+`snapshot` · `set` · `stop` · `rm` · `list` · `path`/`code` · `doctor` · `guard`
 
 `create` takes `--image`, `--with postgres,redis` (sidecars), `--port 3000`
-(publish to host), and `--up "npm run dev"` (dev command for `neonroot up`).
-Image templates: `node` · `python` · `go` · `rust` · `postgres` · `redis` ·
-`arch-dev` · `minimal`.
+(publish to host), `--up "npm run dev"` (dev command for `neonroot up`), and
+`--seed <dir>` (turn an existing project directory into a workspace). `run <ws> --
+<cmd>` runs a command in the container and propagates its exit code (the CI/scripting
+primitive); `logs <ws>` shows container/pod logs. Image templates: `node` · `python` ·
+`go` · `rust` · `postgres` · `redis` · `arch-dev` · `ci` · `minimal`.
 
 **Vaults** (one-time setup): `vault add` · `list` · `set-default` · `set` · `rm`
 
-**Images**: `image create --template <minimal|arch-dev>` · `build` · `ls` · `set --rename`
-· `rm` · `snapshot`
+**Images**: `image create --template <minimal|arch-dev|ci>` · `build` · `ls` ·
+`set --rename` · `rm` · `snapshot`
 
 **Templates**: `template ls` · `new` · `path` — plus `create --template <name>` and
 `--from <workspace>`.

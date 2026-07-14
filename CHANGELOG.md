@@ -5,6 +5,21 @@ deliberately (see `docs/VISION.md` for where it's going).
 
 ## Unreleased
 
+### dogfooding & CI
+
+- **`ci` image template** — alpine + Go + git + rsync + a self-contained
+  passwordless-localhost sshd. Turns a workspace into a hermetic test/CI sandbox;
+  it's what runs NeonRoot's own ssh integration tests *inside* a container.
+- **`create --seed <dir>`** — import an existing host directory as a workspace's
+  initial content (skips `.git`). "Turn this project into a workspace."
+- **`run <ws> -- <cmd>`** — headless exec that propagates the command's exit code
+  (the CI/scripting primitive). **`logs <ws> [-f]`** — container/pod logs.
+- **Integration suite** (`//go:build integration`, `go test -tags integration ./...`)
+  for the ssh/rsync transport, git-over-ssh, cross-device catalog non-ff, and
+  secrets-reach-the-container. Dogfooding it caught a real bug: an empty
+  `_catalog.git` clone landed the first commit off `main`, so the catalog push
+  failed — now `CloneCatalog` pins the branch to `main`.
+
 ### polish
 
 - **TUI CRUD** — the cockpit now deletes (`d`, with a y/N confirm), renames (`e`),

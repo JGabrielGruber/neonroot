@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform/runnertest"
 )
 
@@ -66,7 +67,7 @@ func TestPodman_RunBuildsArgs(t *testing.T) {
 func TestPodman_StartKeepsAlive(t *testing.T) {
 	rec := runnertest.New()
 	rec.Stdout["podman"] = "cid\n"
-	if _, err := newPodman(rec).Start(context.Background(), "img", "nr-app", "/tmp/nr/workspaces/app", "/code", []string{"3000", "5432:5432"}); err != nil {
+	if _, err := newPodman(rec).Start(context.Background(), "img", "nr-app", "/tmp/nr/workspaces/app", "/code", []string{"3000", "5432:5432"}, domain.SessionOpts{}); err != nil {
 		t.Fatal(err)
 	}
 	want := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers " +
@@ -74,6 +75,29 @@ func TestPodman_StartKeepsAlive(t *testing.T) {
 		"-p 3000:3000 -p 5432:5432 img sleep infinity"
 	if got := rec.Lines()[0]; got != want {
 		t.Errorf("start args:\n got %q\nwant %q", got, want)
+	}
+}
+
+// Secrets extras: read-only bind-mounts and an --env-file (values kept out of argv).
+func TestPodman_StartWithSecrets(t *testing.T) {
+	rec := runnertest.New()
+	rec.Stdout["podman"] = "cid\n"
+	opts := domain.SessionOpts{
+		EnvFile: "/run/user/1000/nr/secrets/app.env",
+		Mounts: []domain.Mount{
+			{Source: "/run/user/1000/ssh-agent.sock", Target: "/ssh-agent"},
+			{Source: "/home/me/.gitconfig", Target: "/root/.gitconfig", ReadOnly: true},
+		},
+	}
+	if _, err := newPodman(rec).Start(context.Background(), "img", "nr-app", "/tmp/ws", "/workspace", nil, opts); err != nil {
+		t.Fatal(err)
+	}
+	want := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers " +
+		"run -d --pull=never --name nr-app -v /tmp/ws:/workspace -w /workspace " +
+		"-v /run/user/1000/ssh-agent.sock:/ssh-agent -v /home/me/.gitconfig:/root/.gitconfig:ro " +
+		"--env-file /run/user/1000/nr/secrets/app.env img sleep infinity"
+	if got := rec.Lines()[0]; got != want {
+		t.Errorf("start+secrets args:\n got %q\nwant %q", got, want)
 	}
 }
 
@@ -141,7 +165,7 @@ func TestPodman_EnsureImage_SkipsWhenPresent(t *testing.T) {
 func TestPodman_StartPod(t *testing.T) {
 	rec := runnertest.New()
 	if _, err := newPodman(rec).StartPod(context.Background(), "nr-app",
-		[]string{"img-primary", "img-side"}, "nr-app", "/tmp/ws", "/workspace", []string{"3000"}); err != nil {
+		[]string{"img-primary", "img-side"}, "nr-app", "/tmp/ws", "/workspace", []string{"3000"}, domain.SessionOpts{}); err != nil {
 		t.Fatal(err)
 	}
 	base := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers "

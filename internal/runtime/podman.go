@@ -15,6 +15,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/JGabrielGruber/neonroot/internal/domain"
 	"github.com/JGabrielGruber/neonroot/internal/platform"
 )
 
@@ -33,6 +34,11 @@ type RunSpec struct {
 	// Ports published to the host ("host:container" or "port"). Ignored when the
 	// container joins a pod — the pod owns the network (publish on pod create).
 	Ports []string
+	// EnvFile, if set, is passed as podman --env-file so secret values never
+	// appear in the process argv.
+	EnvFile string
+	// Mounts are extra bind-mounts (e.g. the SSH agent socket, ~/.gitconfig).
+	Mounts []domain.Mount
 }
 
 // publishArgs expands port specs into repeated -p flags, normalizing a bare
@@ -93,6 +99,16 @@ func (p *Podman) Run(ctx context.Context, spec RunSpec) (string, error) {
 		}
 		args = append(args, "-v", spec.WorkspaceDir+":"+target, "-w", target)
 	}
+	for _, m := range spec.Mounts {
+		bind := m.Source + ":" + m.Target
+		if m.ReadOnly {
+			bind += ":ro"
+		}
+		args = append(args, "-v", bind)
+	}
+	if spec.EnvFile != "" {
+		args = append(args, "--env-file", spec.EnvFile)
+	}
 	if spec.Pod == "" {
 		args = append(args, publishArgs(spec.Ports)...) // pod owns ports otherwise
 	}
@@ -114,7 +130,7 @@ func (p *Podman) Stop(ctx context.Context, id string) error {
 // with `sleep infinity`) with the tmpfs workspace bind-mounted at mountTarget
 // (defaults to /workspace), and returns its container ID. A session then execs a
 // shell into it.
-func (p *Podman) Start(ctx context.Context, image, name, workspaceDir, mountTarget string, ports []string) (string, error) {
+func (p *Podman) Start(ctx context.Context, image, name, workspaceDir, mountTarget string, ports []string, opts domain.SessionOpts) (string, error) {
 	return p.Run(ctx, RunSpec{
 		Image:        image,
 		Name:         name,
@@ -122,6 +138,8 @@ func (p *Podman) Start(ctx context.Context, image, name, workspaceDir, mountTarg
 		MountTarget:  mountTarget,
 		Command:      []string{"sleep", "infinity"},
 		Ports:        ports,
+		EnvFile:      opts.EnvFile,
+		Mounts:       opts.Mounts,
 	})
 }
 
@@ -129,7 +147,7 @@ func (p *Podman) Start(ctx context.Context, image, name, workspaceDir, mountTarg
 // (imageRefs[0]) runs with the workspace bind-mounted and is where the shell
 // attaches; the remaining images run as sidecars sharing the pod's network
 // (reachable over localhost). Returns the primary container's ID.
-func (p *Podman) StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string, ports []string) (string, error) {
+func (p *Podman) StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string, ports []string, opts domain.SessionOpts) (string, error) {
 	args := append(p.baseArgs(), "pod", "create", "--name", podName)
 	args = append(args, publishArgs(ports)...) // the pod owns the shared network
 	if _, err := p.Runner.Run(ctx, "podman", args...); err != nil {
@@ -139,6 +157,7 @@ func (p *Podman) StartPod(ctx context.Context, podName string, imageRefs []strin
 		Pod: podName, Image: imageRefs[0], Name: primaryName,
 		WorkspaceDir: workspaceDir, MountTarget: mountTarget,
 		Command: []string{"sleep", "infinity"},
+		EnvFile: opts.EnvFile, Mounts: opts.Mounts,
 	})
 	if err != nil {
 		return "", err

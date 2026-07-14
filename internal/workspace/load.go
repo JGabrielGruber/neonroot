@@ -36,11 +36,12 @@ type Runtime interface {
 	// vault) if absent, or always when reload is set.
 	EnsureImage(ctx context.Context, ref, tarPath string, reload bool) error
 	// Start launches the primary container with the workspace bind-mounted at
-	// mountTarget (empty = default), publishing ports, and returns its ID.
-	Start(ctx context.Context, image, name, workspaceDir, mountTarget string, ports []string) (string, error)
+	// mountTarget (empty = default), publishing ports, and returns its ID. opts
+	// carries optional secrets extras (env-file, bind-mounts); its zero value is none.
+	Start(ctx context.Context, image, name, workspaceDir, mountTarget string, ports []string, opts domain.SessionOpts) (string, error)
 	// StartPod launches a pod: the primary image (refs[0]) with the workspace
 	// mounted, plus sidecars sharing the network; ports are published on the pod.
-	StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string, ports []string) (string, error)
+	StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string, ports []string, opts domain.SessionOpts) (string, error)
 }
 
 // Git is the version-control capability Load uses to clone a workspace's bare
@@ -167,7 +168,7 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 	// a host tmux session.
 	containerized := false
 	if len(entry.Images) > 0 && !l.NoContainer && l.Runtime != nil && l.Runtime.Available() {
-		if cid, err := l.startContainer(ctx, v, entry, name, dst); err != nil {
+		if cid, err := l.startContainer(ctx, v, entry, name, dst, domain.SessionOpts{}); err != nil {
 			l.UI.Warn(fmt.Sprintf("container not started (host-only): %v", err))
 		} else {
 			ws.ContainerID = cid
@@ -194,7 +195,7 @@ func (l *Loader) Load(v domain.Vault, name string) (*domain.Workspace, error) {
 // store (from the vault, offline) and starts its primary container with the
 // workspace bind-mounted at the configured target. Sidecar images (the rest of
 // the list) are loaded too but only run as a pod in a later phase.
-func (l *Loader) startContainer(ctx context.Context, v domain.Vault, entry domain.IndexWorkspace, name, dst string) (string, error) {
+func (l *Loader) startContainer(ctx context.Context, v domain.Vault, entry domain.IndexWorkspace, name, dst string, opts domain.SessionOpts) (string, error) {
 	refs := make([]string, len(entry.Images))
 	for i, img := range entry.Images {
 		l.UI.Step(fmt.Sprintf("loading image %q", img))
@@ -216,10 +217,10 @@ func (l *Loader) startContainer(ctx context.Context, v domain.Vault, entry domai
 	// One image → a single container; multiple → a pod (primary + sidecars).
 	if len(refs) == 1 {
 		l.UI.Step(fmt.Sprintf("starting container (%s)", entry.Images[0]))
-		return l.Runtime.Start(ctx, refs[0], containerName(name), dst, entry.Mount, entry.Ports)
+		return l.Runtime.Start(ctx, refs[0], containerName(name), dst, entry.Mount, entry.Ports, opts)
 	}
 	l.UI.Step(fmt.Sprintf("starting pod (%s + %d sidecar(s))", entry.Images[0], len(refs)-1))
-	return l.Runtime.StartPod(ctx, containerName(name), refs, containerName(name), dst, entry.Mount, entry.Ports)
+	return l.Runtime.StartPod(ctx, containerName(name), refs, containerName(name), dst, entry.Mount, entry.Ports, opts)
 }
 
 // fetchRemoteImage downloads a remote vault's images/<img>/image.tar into a

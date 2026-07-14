@@ -139,3 +139,19 @@ internal/
   `--force-with-lease` refuses a concurrent writer.
 - **Mount detection across re-plugs** — `/proc/self/mountinfo` + a readable `index.toml`
   distinguish a mounted drive from a stale mountpoint directory.
+- **Remote vaults + secrets over ssh** — the `//go:build integration` suite exercises the
+  real ssh/scp/rsync transport, git init-bare/seed/clone over ssh, a cross-device catalog
+  non-fast-forward, and (with podman) that a container actually receives the `--env-file`
+  vars and the `:ro` identity bind-mount. The secrets/container path is validated; the ssh
+  paths run wherever passwordless localhost ssh (or a real host) is configured.
+
+## Running the integration suite
+
+Excluded from the default build; run on target hardware:
+
+```
+go test -tags integration ./...
+```
+
+Each test skips cleanly when its dependency is absent (`podman`, or passwordless
+`ssh localhost`), so a partial environment still runs what it can.

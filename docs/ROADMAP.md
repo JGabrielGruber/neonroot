@@ -42,8 +42,8 @@ Make it useful for real fullstack work, not just editing.
 - ✅ **Ports + `neonroot up`** — `create --port 3000` publishes to the host (on the
   pod/container); `neonroot up <ws> [-- cmd]` runs the dev command in the container
   (or the declared `--up` command). "plug in, `up`, open localhost:3000."
-- **Version managers** *(next)* — `mise`/`asdf` baked into templates for declarative
-  toolchains.
+- ✅ **Version managers** — `mise` baked into the arch-dev image and activated in its shell;
+  a workspace's `.mise.toml` / `.tool-versions` pins its toolchain, restored on every load.
 
 Secrets & identity passthrough moved to **E3** (below) — it's most useful now that remotes
 push over ssh.
@@ -68,8 +68,9 @@ Broaden beyond the local drive; make carrying an environment reach a server.
   on `stop`; surfaced as a `(secrets)` marker. `create/set/load --secrets`.
 - ✅ **rsync transport** — `vault --rsync` prefers rsync (resume + skip-unchanged) over scp
   for image transfers, with scp fallback.
-- **Remote images: `snapshot`/`set`/`rm`** *(next)* — currently local-vault only; remote
-  vaults defer these with a clear message.
+- ✅ **Remote images** — `create`/`build`/`ls`/`snapshot`/`rm` all work against a remote
+  vault (over scp/rsync + ssh). Only `image set --rename` stays local-only for now (it
+  needs a remote dir move + re-tag).
 
 ## E4 — Agent substrate (the asymmetric bet)
 

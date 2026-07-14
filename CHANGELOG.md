@@ -5,6 +5,18 @@ deliberately (see `docs/VISION.md` for where it's going).
 
 ## Unreleased
 
+### polish
+
+- **TUI CRUD** — the cockpit now deletes (`d`, with a y/N confirm), renames (`e`),
+  and creates with an image (`n` accepts `name [image]`), on top of the existing
+  load/attach/commit/stop/sync.
+- **Remote image `snapshot`/`rm`** — both now work against a remote vault (over
+  scp/rsync + ssh); only `image set --rename` stays local-only.
+- **`mise` in arch-dev** — declarative toolchains: a workspace's `.mise.toml` /
+  `.tool-versions` is restored on every load.
+- **Fix** — `load` no longer fails with "container name already in use" when a
+  container lingered from a past session; `run`/`pod create` use `--replace`.
+
 ### E3.6 — secrets passthrough + rsync
 
 - **Secrets / identity passthrough** — opt-in, per-workspace, ephemeral. On load

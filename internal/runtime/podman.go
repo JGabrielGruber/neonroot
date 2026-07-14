@@ -30,6 +30,22 @@ type RunSpec struct {
 	Command []string
 	// Pod, if set, joins the container to that pod (shared network).
 	Pod string
+	// Ports published to the host ("host:container" or "port"). Ignored when the
+	// container joins a pod — the pod owns the network (publish on pod create).
+	Ports []string
+}
+
+// publishArgs expands port specs into repeated -p flags, normalizing a bare
+// "3000" to "3000:3000".
+func publishArgs(ports []string) []string {
+	var args []string
+	for _, p := range ports {
+		if !strings.Contains(p, ":") {
+			p = p + ":" + p
+		}
+		args = append(args, "-p", p)
+	}
+	return args
 }
 
 // Podman is the exec-backed Runtime. GraphRoot/RunRoot relocate storage onto
@@ -77,6 +93,9 @@ func (p *Podman) Run(ctx context.Context, spec RunSpec) (string, error) {
 		}
 		args = append(args, "-v", spec.WorkspaceDir+":"+target, "-w", target)
 	}
+	if spec.Pod == "" {
+		args = append(args, publishArgs(spec.Ports)...) // pod owns ports otherwise
+	}
 	args = append(args, spec.Image)
 	args = append(args, spec.Command...)
 
@@ -95,13 +114,14 @@ func (p *Podman) Stop(ctx context.Context, id string) error {
 // with `sleep infinity`) with the tmpfs workspace bind-mounted at mountTarget
 // (defaults to /workspace), and returns its container ID. A session then execs a
 // shell into it.
-func (p *Podman) Start(ctx context.Context, image, name, workspaceDir, mountTarget string) (string, error) {
+func (p *Podman) Start(ctx context.Context, image, name, workspaceDir, mountTarget string, ports []string) (string, error) {
 	return p.Run(ctx, RunSpec{
 		Image:        image,
 		Name:         name,
 		WorkspaceDir: workspaceDir,
 		MountTarget:  mountTarget,
 		Command:      []string{"sleep", "infinity"},
+		Ports:        ports,
 	})
 }
 
@@ -109,8 +129,9 @@ func (p *Podman) Start(ctx context.Context, image, name, workspaceDir, mountTarg
 // (imageRefs[0]) runs with the workspace bind-mounted and is where the shell
 // attaches; the remaining images run as sidecars sharing the pod's network
 // (reachable over localhost). Returns the primary container's ID.
-func (p *Podman) StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string) (string, error) {
+func (p *Podman) StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string, ports []string) (string, error) {
 	args := append(p.baseArgs(), "pod", "create", "--name", podName)
+	args = append(args, publishArgs(ports)...) // the pod owns the shared network
 	if _, err := p.Runner.Run(ctx, "podman", args...); err != nil {
 		return "", err
 	}

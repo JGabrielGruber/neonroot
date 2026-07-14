@@ -145,6 +145,7 @@ type fakeRuntime struct {
 	ensured   []string // image refs loaded into the store
 	started   []string // image refs run as the primary container
 	mount     string
+	ports     []string
 	id        string
 }
 
@@ -153,14 +154,16 @@ func (f *fakeRuntime) EnsureImage(_ context.Context, ref, _ string, _ bool) erro
 	f.ensured = append(f.ensured, ref)
 	return nil
 }
-func (f *fakeRuntime) Start(_ context.Context, image, _, _, mountTarget string) (string, error) {
+func (f *fakeRuntime) Start(_ context.Context, image, _, _, mountTarget string, ports []string) (string, error) {
 	f.started = append(f.started, image)
 	f.mount = mountTarget
+	f.ports = ports
 	return f.id, nil
 }
-func (f *fakeRuntime) StartPod(_ context.Context, _ string, refs []string, _, _, mountTarget string) (string, error) {
+func (f *fakeRuntime) StartPod(_ context.Context, _ string, refs []string, _, _, mountTarget string, ports []string) (string, error) {
 	f.started = append(f.started, refs...)
 	f.mount = mountTarget
+	f.ports = ports
 	return f.id, nil
 }
 

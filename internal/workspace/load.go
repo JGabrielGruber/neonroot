@@ -34,11 +34,11 @@ type Runtime interface {
 	// vault) if absent, or always when reload is set.
 	EnsureImage(ctx context.Context, ref, tarPath string, reload bool) error
 	// Start launches the primary container with the workspace bind-mounted at
-	// mountTarget (empty = default) and returns its ID.
-	Start(ctx context.Context, image, name, workspaceDir, mountTarget string) (string, error)
+	// mountTarget (empty = default), publishing ports, and returns its ID.
+	Start(ctx context.Context, image, name, workspaceDir, mountTarget string, ports []string) (string, error)
 	// StartPod launches a pod: the primary image (refs[0]) with the workspace
-	// mounted, plus sidecars sharing the network. Returns the primary's ID.
-	StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string) (string, error)
+	// mounted, plus sidecars sharing the network; ports are published on the pod.
+	StartPod(ctx context.Context, podName string, imageRefs []string, primaryName, workspaceDir, mountTarget string, ports []string) (string, error)
 }
 
 // Git is the version-control capability Load uses to clone a workspace's bare
@@ -185,10 +185,10 @@ func (l *Loader) startContainer(ctx context.Context, v domain.Vault, entry domai
 	// One image → a single container; multiple → a pod (primary + sidecars).
 	if len(refs) == 1 {
 		l.UI.Step(fmt.Sprintf("starting container (%s)", entry.Images[0]))
-		return l.Runtime.Start(ctx, refs[0], containerName(name), dst, entry.Mount)
+		return l.Runtime.Start(ctx, refs[0], containerName(name), dst, entry.Mount, entry.Ports)
 	}
 	l.UI.Step(fmt.Sprintf("starting pod (%s + %d sidecar(s))", entry.Images[0], len(refs)-1))
-	return l.Runtime.StartPod(ctx, containerName(name), refs, containerName(name), dst, entry.Mount)
+	return l.Runtime.StartPod(ctx, containerName(name), refs, containerName(name), dst, entry.Mount, entry.Ports)
 }
 
 // containerName derives a stable container name from a workspace name, matching

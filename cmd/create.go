@@ -25,6 +25,8 @@ var (
 	createTemplateFlag string
 	createShellFlag    string
 	createWithFlag     string
+	createPortFlag     string
+	createUpFlag       string
 )
 
 // splitList parses a comma-separated flag into trimmed, non-empty items.
@@ -116,7 +118,12 @@ image run host-only).`,
 			return err
 		}
 
-		entry := domain.IndexWorkspace{Name: name, Root: root, Mount: createMountFlag, Shell: shellCommand(createShellFlag)}
+		entry := domain.IndexWorkspace{
+			Name: name, Root: root, Mount: createMountFlag,
+			Shell: shellCommand(createShellFlag),
+			Ports: splitList(createPortFlag),
+			Up:    shellCommand(createUpFlag),
+		}
 		if image != "" {
 			entry.Images = append([]string{image}, splitList(createWithFlag)...)
 		} else if createWithFlag != "" {
@@ -181,5 +188,7 @@ func init() {
 	createCmd.Flags().StringVar(&createTemplateFlag, "template", "default", "starter template (see 'neonroot template ls')")
 	createCmd.Flags().StringVar(&createShellFlag, "shell", "", "command to run on attach into the container (default: a login shell)")
 	createCmd.Flags().StringVar(&createWithFlag, "with", "", "sidecar images to run alongside (comma-separated, e.g. postgres,redis)")
+	createCmd.Flags().StringVar(&createPortFlag, "port", "", "ports to publish to the host (comma-separated, 'host:container' or 'port')")
+	createCmd.Flags().StringVar(&createUpFlag, "up", "", "dev command 'neonroot up' runs in the container (e.g. 'npm run dev')")
 	rootCmd.AddCommand(createCmd)
 }

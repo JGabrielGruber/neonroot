@@ -30,20 +30,22 @@ All items below are shipped.
   workspaces hot/cold + dirty/ahead, images) with one-key load/attach/commit/sync/stop.
   A Bubble Tea view over the same CLI verbs. The product-defining move.
 
-## E2 — Fullstack toolbelt
+## E2 — Fullstack toolbelt (mostly shipped)
 
 Make it useful for real fullstack work, not just editing.
 
-- **Language image templates** — `node`, `python`, `go`, `rust`, `ruby`, … shipped and
-  community-shareable (the "toolbelt").
-- **Databases as sidecars** — ergonomic over the existing pod engine:
+- ✅ **Language image templates** — `node`, `python` (+uv), `go`, `rust` (plus `arch-dev`
+  editor, `minimal`), shipped and community-shareable (the "toolbelt").
+- ✅ **Databases as sidecars** — over the pod engine:
   `create app --image node --with postgres,redis` (app + DB + cache, reachable over
-  localhost).
-- **`neonroot up`** — run the project's dev server and forward its port to the host
-  ("plug in, `up`, open localhost:3000").
-- **Secrets & identity** — inject SSH keys / git identity / tokens into a loaded
+  localhost). Ships `postgres`/`redis` image templates.
+- ✅ **Ports + `neonroot up`** — `create --port 3000` publishes to the host (on the
+  pod/container); `neonroot up <ws> [-- cmd]` runs the dev command in the container
+  (or the declared `--up` command). "plug in, `up`, open localhost:3000."
+- **Secrets & identity** *(next)* — inject SSH keys / git identity / tokens into a loaded
   workspace from the vault or host agent, into RAM, wiped on `stop`; never on the SD card.
-- **Version managers** — `mise`/`asdf` baked into templates for declarative toolchains.
+- **Version managers** *(next)* — `mise`/`asdf` baked into templates for declarative
+  toolchains.
 
 ## E3 — Reach & safety
 

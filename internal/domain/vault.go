@@ -68,6 +68,12 @@ type IndexWorkspace struct {
 	// Shell is the command run when attaching into the container. Empty uses the
 	// default (tmux if present, else bash).
 	Shell []string `toml:"shell,omitempty"`
+	// Ports are published from the container/pod to the host on load, so a dev
+	// server is reachable at localhost. Each is "host:container" or just "port".
+	Ports []string `toml:"ports,omitempty"`
+	// Up is the command 'neonroot up' runs inside the container (e.g. the dev
+	// server), when none is given on the command line.
+	Up []string `toml:"up,omitempty"`
 }
 
 // PrimaryImage returns the image the workspace's shell runs in, or "" for

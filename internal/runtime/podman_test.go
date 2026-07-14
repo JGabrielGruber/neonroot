@@ -66,11 +66,12 @@ func TestPodman_RunBuildsArgs(t *testing.T) {
 func TestPodman_StartKeepsAlive(t *testing.T) {
 	rec := runnertest.New()
 	rec.Stdout["podman"] = "cid\n"
-	if _, err := newPodman(rec).Start(context.Background(), "img", "nr-app", "/tmp/nr/workspaces/app", "/code"); err != nil {
+	if _, err := newPodman(rec).Start(context.Background(), "img", "nr-app", "/tmp/nr/workspaces/app", "/code", []string{"3000", "5432:5432"}); err != nil {
 		t.Fatal(err)
 	}
 	want := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers " +
-		"run -d --pull=never --name nr-app -v /tmp/nr/workspaces/app:/code -w /code img sleep infinity"
+		"run -d --pull=never --name nr-app -v /tmp/nr/workspaces/app:/code -w /code " +
+		"-p 3000:3000 -p 5432:5432 img sleep infinity"
 	if got := rec.Lines()[0]; got != want {
 		t.Errorf("start args:\n got %q\nwant %q", got, want)
 	}
@@ -140,12 +141,13 @@ func TestPodman_EnsureImage_SkipsWhenPresent(t *testing.T) {
 func TestPodman_StartPod(t *testing.T) {
 	rec := runnertest.New()
 	if _, err := newPodman(rec).StartPod(context.Background(), "nr-app",
-		[]string{"img-primary", "img-side"}, "nr-app", "/tmp/ws", "/workspace"); err != nil {
+		[]string{"img-primary", "img-side"}, "nr-app", "/tmp/ws", "/workspace", []string{"3000"}); err != nil {
 		t.Fatal(err)
 	}
 	base := "podman --root /tmp/nr/containers --runroot /run/user/1000/nr/containers "
 	lines := rec.Lines()
-	if lines[0] != base+"pod create --name nr-app" {
+	// Ports are published on the pod (which owns the network), not the containers.
+	if lines[0] != base+"pod create --name nr-app -p 3000:3000" {
 		t.Errorf("pod create: %q", lines[0])
 	}
 	if lines[1] != base+"run -d --pull=never --pod nr-app --name nr-app -v /tmp/ws:/workspace -w /workspace img-primary sleep infinity" {

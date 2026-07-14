@@ -3,7 +3,27 @@
 Notable changes, newest first. NeonRoot is pre-1.0; the model has evolved
 deliberately (see `docs/VISION.md` for where it's going).
 
-## Unreleased — image templates & session model
+## Unreleased
+
+### E2 — fullstack toolbelt
+- **Language + database image templates** — `node`, `python`, `go`, `rust`
+  (language) and `postgres`, `redis` (sidecar services), alongside `arch-dev`
+  and `minimal`. `image create <name> --template <t>`.
+- **Sidecars in one command** — `create app --image node --with postgres,redis`
+  runs the app + database + cache as a podman pod sharing localhost.
+- **Ports + `up`** — `create --port 3000,5432` publishes to the host;
+  `neonroot up <ws> [-- cmd]` runs the dev command inside the container (or the
+  workspace's declared `--up` command). Plug in, `up`, open localhost:3000.
+
+### E1 — human-first
+- **Interactive TUI cockpit** — `neonroot` with no args: vaults/workspaces/images
+  dashboard with one-key load/attach/commit/sync/stop, live refresh. `--no-tui`
+  falls back to help.
+- **Safety layer** — `sync` (push all pending work), `doctor` (preflight),
+  `guard [vault]` (scriptable unplug gate), `path`/`code` (open a workspace in
+  any host editor).
+
+### image templates & session model
 
 - **arch-dev image template** — a batteries-included terminal dev environment
   (nvim + LazyVim with plugins pre-synced, tmux with continuum session saving,

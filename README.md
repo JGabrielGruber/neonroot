@@ -65,8 +65,13 @@ workspace templates**, not the binary.
 ## Commands
 
 **Workspaces** (the everyday surface):
-`create` · `load` · `attach` · `commit` · `sync` · `status` · `snapshot` · `set` ·
-`stop` · `rm` · `list` · `path`/`code` · `doctor` · `guard`
+`create` · `load` · `attach` · `up` · `commit` · `sync` · `status` · `snapshot` ·
+`set` · `stop` · `rm` · `list` · `path`/`code` · `doctor` · `guard`
+
+`create` takes `--image`, `--with postgres,redis` (sidecars), `--port 3000`
+(publish to host), and `--up "npm run dev"` (dev command for `neonroot up`).
+Image templates: `node` · `python` · `go` · `rust` · `postgres` · `redis` ·
+`arch-dev` · `minimal`.
 
 **Vaults** (one-time setup): `vault add` · `list` · `set-default` · `set` · `rm`
 

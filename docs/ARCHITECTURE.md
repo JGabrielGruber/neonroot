@@ -20,6 +20,35 @@ lives here.
 (create/rm/rename); **git** owns *content* history and conflict handling. They don't
 overlap.
 
+## Vault kinds: local drive vs remote ssh
+
+A vault is either **local** (a directory on a drive — `Vault.Path`) or **remote** (an
+ssh server — `Vault.Remote`, an `ssh://user@host/path` or `user@host:path` target). Both
+use the *same layout* (`index.toml` + `workspaces/*.git` + `images/*/image.tar`); only the
+transport differs, so the whole system stays kind-agnostic through two seams:
+
+- **`vault.Catalog`** reads/writes the index regardless of kind. Local = the on-drive
+  `index.toml`. Remote = an `index.toml` tracked in a `_catalog.git` bare repo at the vault
+  root, cloned into tmpfs on demand; a metadata write commits + pushes it, so two devices
+  editing the catalog collide on **git non-fast-forward** (→ `ErrCommitConflict`) rather
+  than silently clobbering — the same conflict model the workspace repos use.
+- **`internal/remote`** is the ssh transport: `Addr` parses/joins ssh + scp-style targets
+  (the `://` presence disambiguates an ssh *port* from an scp *path* colon), and `Transport`
+  moves the non-git pieces — `Fetch`/`Upload` image tarballs over **scp**, `InitBare`/`Mkdir`
+  set up repos/dirs over **ssh**. Every call goes through `platform.Runner`, so the exact
+  scp/ssh argv is unit-tested without spawning.
+
+**Availability is optimistic for remotes:** no network probe on `status`/`list`; a remote
+op just fails on the actual ssh/scp exit (offline-first snappiness). Workspace clone/commit
+need *no* special code — `git.Clone`'s origin is simply the ssh URL, so `commit`/`sync`
+push there unchanged, non-ff handling included. Loading a containerized remote workspace =
+clone repo (ssh) + fetch `image.tar` into tmpfs (scp) + the existing `podman load` path.
+
+**Encryption** falls out for free: point a local vault's `Path` at a mounted
+gocryptfs/LUKS filesystem — `vault.State` just checks the mount. **Multi-device sync** is
+the same `Remote` configured on two machines, each with its own tmpfs clone, reconciled by
+git non-ff. Neither needs new code.
+
 ## Path layout (the SD-write guarantee)
 
 All resolution is centralized in `internal/platform/paths.go`.
@@ -59,6 +88,7 @@ internal/
   vault/            vault resolution, availability (VaultState via mountinfo),
                     index.toml read/write + version gate, image layout
   git/              git adapter (clone/commit/push/status/snapshot) — workspaces are git
+  remote/           ssh vault addressing (Addr) + scp/ssh transport (Transport)
   workspace/        load orchestration + loaded-workspace state (List/ReadState/HotSize)
   session/          tmux adapter (host-only sessions)
   runtime/          podman adapter: graphroot→tmpfs, images, pods

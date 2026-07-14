@@ -5,6 +5,22 @@ deliberately (see `docs/VISION.md` for where it's going).
 
 ## Unreleased
 
+### E3 — reach & safety
+
+- **Remote vaults** — a vault can live on an ssh server, not just a local drive:
+  `neonroot vault add cloud ssh://user@host/path` (or `user@host:path`). A remote
+  vault uses the *same layout* as a local one — catalog, git workspaces, image
+  tarballs — reached over git + scp instead of the filesystem.
+  `create`/`load`/`commit`/`sync`, `image create`/`build`/`ls`, and `list` all
+  work against it. Availability is **optimistic** (no network probe — offline-first
+  and snappy); ops fail lazily if the host is unreachable. Cross-device catalog and
+  workspace writes reconcile on **git non-fast-forward** (`ErrCommitConflict`),
+  never a silent clobber — the catalog is itself a `_catalog.git` bare repo.
+  `image snapshot`/`set`/`rm` against a remote are deferred with a clear message.
+- **Encryption & multi-device** *(docs)* — both fall out of the model: a vault path
+  can be a mounted gocryptfs/LUKS filesystem, and the same remote on two machines
+  syncs through git non-ff. See `docs/ARCHITECTURE.md`.
+
 ### E2 — fullstack toolbelt
 - **Language + database image templates** — `node`, `python`, `go`, `rust`
   (language) and `postgres`, `redis` (sidecar services), alongside `arch-dev`

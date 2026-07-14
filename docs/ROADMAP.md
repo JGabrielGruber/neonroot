@@ -42,21 +42,31 @@ Make it useful for real fullstack work, not just editing.
 - ✅ **Ports + `neonroot up`** — `create --port 3000` publishes to the host (on the
   pod/container); `neonroot up <ws> [-- cmd]` runs the dev command in the container
   (or the declared `--up` command). "plug in, `up`, open localhost:3000."
-- **Secrets & identity** *(next)* — inject SSH keys / git identity / tokens into a loaded
-  workspace from the vault or host agent, into RAM, wiped on `stop`; never on the SD card.
 - **Version managers** *(next)* — `mise`/`asdf` baked into templates for declarative
   toolchains.
 
-## E3 — Reach & safety
+Secrets & identity passthrough moved to **E3** (below) — it's most useful now that remotes
+push over ssh.
 
-Broaden beyond the CLI-native few; make carrying an environment safe.
+## E3 — Reach & safety (mostly shipped)
 
-- **Remote vaults** — a vault addressable over `ssh://`/`https://` git: sync to a server
-  *when online*, work offline otherwise. Offline-first, cloud-optional — bridges toward
-  the CDE world without becoming one.
-- **Vault encryption** — gocryptfs/LUKS-backed vaults; safe to lose the USB stick.
-- **Multi-device sync** — formalize "same environment on laptop and SBC" (nearly free
-  given git + a drive).
+Broaden beyond the local drive; make carrying an environment reach a server.
+
+- ✅ **Remote vaults** — a vault hosted over ssh (`vault add cloud ssh://user@host/path`
+  or `user@host:path`). Same layout as a local vault — catalog (`_catalog.git`), git
+  workspaces, image tarballs — reached over git + scp. `create`/`load`/`commit`/`sync`,
+  `image create`/`build`/`ls`, and `list` all work against a remote; availability is
+  optimistic (no network probe), so it's offline-first and cloud-optional. Cross-device
+  writes reconcile on git non-fast-forward, not a lock.
+- ✅ **Vault encryption** *(docs)* — point a vault's path at a mounted gocryptfs/LUKS
+  filesystem; `vault.State` just checks the mount. No special code (see `ARCHITECTURE.md`).
+- ✅ **Multi-device sync** *(docs)* — the same remote configured on two machines, each with
+  its own tmpfs clone, reconciled by git non-ff (see `ARCHITECTURE.md`).
+- **Secrets & identity** *(next)* — SSH-agent socket + git identity into a loaded workspace
+  (opt-in, per workspace, into RAM, never on the card). Its own focused pass; most useful
+  now that remotes push over ssh.
+- **Remote images: `snapshot`/`set`/`rm`** *(next)* — currently local-vault only; remote
+  vaults defer these with a clear message.
 
 ## E4 — Agent substrate (the asymmetric bet)
 

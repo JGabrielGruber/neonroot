@@ -48,6 +48,22 @@ neonroot sync                                # re-plug: push all your pending wo
 
 Run `neonroot` with no arguments for the interactive cockpit (`--no-tui` to skip).
 
+**On a server instead of a drive?** A vault can live over ssh — same layout, same
+commands, still offline-first:
+
+```bash
+neonroot vault add cloud ssh://you@host/srv/neonroot   # or you@host:srv/neonroot
+neonroot create webapp --image dev                     # inits the repo on the server
+neonroot load webapp                                    # git-clone over ssh into RAM
+#   … work, commit; a mirror on another machine 'load's the same vault …
+```
+
+Availability is optimistic (no network probe — commands just work offline and fail
+lazily if the host is down), and two machines writing the same vault reconcile on git's
+non-fast-forward, never a silent overwrite. Encrypted vaults (point a vault at a mounted
+gocryptfs/LUKS path) and multi-device sync fall out of the same model — see
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ## How it works
 
 ```
@@ -87,8 +103,9 @@ Conflicts on `commit` resolve with `--rebase` / `--merge` / `--as <branch>` / `-
 ## Requirements
 
 Linux (Arch/Manjaro-first). **`git`** required; **`tmux`** / **`podman`** optional —
-NeonRoot degrades to host-only when they're absent. Config lives on the card; all state,
-clones, and locks are redirected to tmpfs.
+NeonRoot degrades to host-only when they're absent. Remote (ssh) vaults additionally use
+**`ssh`** / **`scp`** and expect key-based auth to the host. Config lives on the card; all
+state, clones, and locks are redirected to tmpfs.
 
 ## Docs
 
